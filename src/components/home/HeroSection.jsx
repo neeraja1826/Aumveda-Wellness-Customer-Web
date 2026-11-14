@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "../../services/supabase";
+import { getWebHeroBanners } from "../../services/homeService";
 
 import "../../styles/hero.css";
 
@@ -133,6 +134,53 @@ function getBannerDestination(filename) {
   }
 
   return "/products";
+}
+
+function getApiBannerList(response) {
+  const candidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.items,
+    response?.items,
+  ];
+
+  return candidates.find(Array.isArray) || null;
+}
+
+function normalizeApiBanners(response) {
+  const items = getApiBannerList(response);
+  if (!items) return null;
+
+  return items
+    .filter((banner) => banner && (banner.image_url || banner.title))
+    .map((banner) => {
+      const metadata = banner.metadata || {};
+      const filename = String(banner.id || banner.title);
+
+      return {
+        id: filename,
+        filename,
+        title: banner.title || "AUMVEDA Wellness",
+        imageUrl: banner.image_url || "",
+        destination:
+          typeof banner.target_url === "string" &&
+          banner.target_url.startsWith("/") &&
+          !banner.target_url.startsWith("//") &&
+          !banner.target_url.includes("\\")
+            ? banner.target_url
+            : "/products",
+        theme: getBannerTheme(
+          `${banner.title || ""} ${banner.image_url || ""}`
+        ),
+        updatedAt: [
+          banner.image_url,
+          banner.title,
+          banner.subtitle,
+          banner.target_url,
+          metadata.eyebrow,
+        ].join("|"),
+      };
+    });
 }
 
 /* ============================================================
@@ -302,7 +350,25 @@ export default function HeroSection() {
     const requestId = ++requestIdRef.current;
 
     try {
-      const latest = await loadStorageBanners();
+      let latest;
+
+      try {
+        const response = await getWebHeroBanners();
+        latest = normalizeApiBanners(response);
+        if (!latest) {
+          throw new Error("Web hero banner response was invalid.");
+        }
+      } catch (apiError) {
+        console.error(
+          "[AUMVEDA HERO] Unable to retrieve Admin banners; using legacy storage banners:",
+          apiError
+        );
+        latest = await loadStorageBanners();
+      }
+
+      if (latest.length === 0) {
+        latest = await loadStorageBanners();
+      }
 
       if (requestId !== requestIdRef.current) {
         return;
@@ -311,7 +377,7 @@ export default function HeroSection() {
       const signature = latest
         .map(
           (slide) =>
-            `${slide.id}:${slide.updatedAt}`
+            `${slide.id}:${slide.updatedAt}:${slide.imageUrl}:${slide.title}`
         )
         .join("|");
 
@@ -721,7 +787,11 @@ export default function HeroSection() {
                   tabIndex={isActive ? 0 : -1}
                   aria-label={slide.title}
                 >
-                  {!imageFailed ? (
+                  {!slide.imageUrl ? (
+                    <div className="aum-hero__fallback aum-hero__text-only">
+                      <span>{slide.title}</span>
+                    </div>
+                  ) : !imageFailed ? (
                     <>
                       <div
                         className="aum-hero__backdrop"

@@ -66,13 +66,48 @@ function normalizePosition(position, width) {
   return ((position % width) + width) % width;
 }
 
-export default function ExploreWellness() {
+export default function ExploreWellness({ section }) {
   const navigate = useNavigate();
 
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [failedImages, setFailedImages] = useState({});
+
+  const visibleCategories = useMemo(() => {
+    const items = Array.isArray(section?.items)
+      ? [...section.items]
+          .filter(
+            (item) =>
+              item?.is_visible !== false &&
+              item?.target_type === "category" &&
+              item?.target_id
+          )
+          .sort(
+            (left, right) =>
+              Number(left.sort_order || 0) -
+              Number(right.sort_order || 0)
+          )
+      : [];
+    const hasCategoryConfiguration =
+      section?.content_config?.categories_managed === true ||
+      items.length > 0;
+
+    if (!hasCategoryConfiguration) {
+      return categories;
+    }
+
+    const byId = new Map(
+      categories.map((category) => [
+        String(category.id),
+        category,
+      ])
+    );
+
+    return items
+      .map((item) => byId.get(String(item.target_id)))
+      .filter(Boolean);
+  }, [categories, section]);
 
   const viewportRef = useRef(null);
   const trackRef = useRef(null);
@@ -174,14 +209,14 @@ export default function ExploreWellness() {
   ========================================================== */
 
   const carouselItems = useMemo(() => {
-    if (categories.length <= 1) return categories;
+    if (visibleCategories.length <= 1) return visibleCategories;
 
     return [
-      ...categories,
-      ...categories,
-      ...categories,
+      ...visibleCategories,
+      ...visibleCategories,
+      ...visibleCategories,
     ];
-  }, [categories]);
+  }, [visibleCategories]);
 
   const paintPosition = useCallback(() => {
     const track = trackRef.current;
@@ -207,13 +242,13 @@ export default function ExploreWellness() {
   const measureTrack = useCallback(() => {
     const track = trackRef.current;
 
-    if (!track || categories.length < 2) {
+    if (!track || visibleCategories.length < 2) {
       loopWidthRef.current = 0;
       return;
     }
 
     const first = track.children[0];
-    const nextSet = track.children[categories.length];
+    const nextSet = track.children[visibleCategories.length];
 
     if (!first || !nextSet) return;
 
@@ -230,7 +265,7 @@ export default function ExploreWellness() {
 
       paintPosition();
     }
-  }, [categories.length, paintPosition]);
+  }, [visibleCategories.length, paintPosition]);
 
   const pauseAutoScroll = useCallback((duration = MANUAL_SCROLL_PAUSE) => {
     pauseUntilRef.current =
@@ -242,7 +277,7 @@ export default function ExploreWellness() {
   ========================================================== */
 
   useEffect(() => {
-    if (loading || categories.length < 2) {
+    if (loading || visibleCategories.length < 2) {
       return undefined;
     }
 
@@ -326,7 +361,7 @@ export default function ExploreWellness() {
       );
     };
   }, [
-    categories,
+    visibleCategories,
     loading,
     reducedMotion,
     measureTrack,
@@ -340,7 +375,7 @@ export default function ExploreWellness() {
   function moveCategories(direction) {
     if (
       !trackRef.current ||
-      categories.length < 2
+      visibleCategories.length < 2
     ) {
       return;
     }
@@ -516,8 +551,8 @@ export default function ExploreWellness() {
 
   function renderCategory(category, index) {
     const duplicate =
-      categories.length > 1 &&
-      index >= categories.length;
+      visibleCategories.length > 1 &&
+      index >= visibleCategories.length;
 
     const imageFailed =
       failedImages[String(category.id)];
@@ -588,7 +623,7 @@ export default function ExploreWellness() {
     );
   }
 
-  if (!categories.length) {
+  if (!visibleCategories.length) {
     return null;
   }
 
@@ -643,7 +678,7 @@ export default function ExploreWellness() {
           }
         }}
       >
-        {categories.length > 1 && (
+        {visibleCategories.length > 1 && (
           <button
             type="button"
             className="explore-carousel__arrow explore-carousel__arrow--left"
@@ -678,7 +713,7 @@ export default function ExploreWellness() {
           </div>
         </div>
 
-        {categories.length > 1 && (
+        {visibleCategories.length > 1 && (
           <button
             type="button"
             className="explore-carousel__arrow explore-carousel__arrow--right"

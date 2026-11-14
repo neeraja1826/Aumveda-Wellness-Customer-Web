@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
@@ -76,7 +76,12 @@ const DISCOVERY_CARDS = [
 function DiscoveryCard({ card }) {
   const [imageFailed, setImageFailed] = useState(false);
 
-  const imageUrl = getStorageImage(card.image);
+  const imageUrl =
+    card.imageUrl || getStorageImage(card.image);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageUrl]);
 
   return (
     <Link
@@ -139,7 +144,48 @@ function DiscoveryCard({ card }) {
   );
 }
 
-export default function MoreDiscovery() {
+export default function MoreDiscovery({ section }) {
+  const cmsItems = Array.isArray(section?.items)
+    ? [...section.items]
+        .filter((item) => item?.is_visible !== false)
+        .sort(
+          (left, right) =>
+            Number(left.sort_order || 0) -
+            Number(right.sort_order || 0)
+        )
+    : [];
+  const usedCardIds = new Set();
+  const configuredCards = cmsItems
+    .slice(0, 4)
+    .map((item, index) => {
+      const cardId =
+        item.item_key ||
+        item.metadata?.card_key;
+      const defaultCard =
+        DISCOVERY_CARDS.find(
+          (card) => card.id === cardId
+        ) || DISCOVERY_CARDS[index];
+
+      if (!defaultCard || usedCardIds.has(defaultCard.id)) {
+        return null;
+      }
+
+      usedCardIds.add(defaultCard.id);
+      return {
+        ...defaultCard,
+        title: item.title || defaultCard.title,
+        subtitle: item.subtitle || defaultCard.subtitle,
+        imageUrl: item.image_url || "",
+      };
+    })
+    .filter(Boolean);
+  const cards = [
+    ...configuredCards,
+    ...DISCOVERY_CARDS.filter(
+      (card) => !usedCardIds.has(card.id)
+    ),
+  ];
+
   return (
     <section
       className="more-discovery"
@@ -147,7 +193,7 @@ export default function MoreDiscovery() {
     >
       <div className="more-discovery__container">
         <div className="more-discovery__grid">
-          {DISCOVERY_CARDS.map((card) => (
+          {cards.map((card) => (
             <DiscoveryCard
               key={card.id}
               card={card}

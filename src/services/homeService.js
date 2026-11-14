@@ -1,5 +1,4 @@
-
-import { api } from "./api";
+import api from "./api";
 
 import {
   cachedPublicRequest,
@@ -10,61 +9,141 @@ const HERO_TTL = 15 * 60 * 1000;
 const CATEGORY_TTL = 30 * 60 * 1000;
 const CMS_TTL = 60 * 1000;
 const COUPONS_TTL = 30 * 1000;
+const HOMEPAGE_BANNERS_TTL = 60 * 1000;
+
+function getResponseData(response) {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  if (Array.isArray(response?.data)) {
+    return response.data;
+  }
+
+  return response?.data ?? response;
+}
+
+/* ==========================================================
+   HOME BANNERS
+========================================================== */
 
 export async function getHomeHero() {
   return cachedPublicRequest(
-    "home:hero",
+    "home:app-banners:v1",
     async () => {
-      const response = await api.get("/home/hero");
-      return response.data;
+      const response = await api.get("/home/app-banners");
+
+      return getResponseData(response);
     },
-    { ttl: HERO_TTL, persist: true }
+    {
+      ttl: HERO_TTL,
+      persist: true,
+    }
   );
 }
+
+export async function getWebHeroBanners() {
+  return cachedPublicRequest(
+    "home:web-hero-banners:v1",
+    async () => {
+      const response = await api.get("/home/web-hero-banners");
+      return getResponseData(response);
+    },
+    {
+      ttl: HOMEPAGE_BANNERS_TTL,
+      persist: true,
+    }
+  );
+}
+
+export async function getMainPromoBanners() {
+  return cachedPublicRequest(
+    "home:main-promo-banners:v1",
+    async () => {
+      const response = await api.get("/home/main-promo-banners");
+      return getResponseData(response);
+    },
+    {
+      ttl: HOMEPAGE_BANNERS_TTL,
+      persist: true,
+    }
+  );
+}
+
+/* ==========================================================
+   HOME CATEGORIES
+========================================================== */
 
 export async function getHomeCategories() {
   return cachedPublicRequest(
-    "home:categories",
+    "categories:v1",
     async () => {
-      const response = await api.get("/home/categories");
-      return response.data;
+      const response = await api.get("/categories");
+
+      return getResponseData(response);
     },
-    { ttl: CATEGORY_TTL, persist: true }
+    {
+      ttl: CATEGORY_TTL,
+      persist: true,
+    }
   );
 }
 
-export async function getHomeConfiguration() {
+/* ==========================================================
+   FEATURED PRODUCTS
+========================================================== */
+
+export async function getFeaturedProducts() {
   return cachedPublicRequest(
-    "home:configuration:v1",
+    "home:featured-products:v1",
     async () => {
       const response = await api.get(
-        "/home/configuration"
+        "/home/featured-products"
       );
 
-      return response.data;
+      return getResponseData(response);
     },
-    { ttl: CMS_TTL, persist: false }
+    {
+      ttl: CMS_TTL,
+      persist: false,
+    }
   );
 }
 
-/* ============================================================
-   CUSTOMER WEB — DYNAMIC HOMEPAGE COUPONS
+/* ==========================================================
+   WELLNESS BUNDLES
+========================================================== */
 
-   Existing Customer Backend endpoint:
-   GET /home/coupons
+export async function getHomeBundles() {
+  return cachedPublicRequest(
+    "home:bundles:v1",
+    async () => {
+      const response = await api.get(
+        "/home/bundles"
+      );
 
-   The Admin Backend writes to the same Supabase
-   coupons table.
+      return getResponseData(response);
+    },
+    {
+      ttl: CMS_TTL,
+      persist: false,
+    }
+  );
+}
 
-   No Admin API or Admin authentication is required.
-============================================================ */
+/* ==========================================================
+   COUPONS
+========================================================== */
 
 export async function getHomeCoupons() {
   return cachedPublicRequest(
     "home:coupons:v1",
     async () => {
-      const response = await api.get("/home/coupons");
-      return response.data;
+      const response = await api.get(
+        "/home/coupons"
+      );
+
+      return getResponseData(response);
     },
     {
       ttl: COUPONS_TTL,
@@ -73,10 +152,113 @@ export async function getHomeCoupons() {
   );
 }
 
+/* ==========================================================
+   NEW ARRIVALS
+========================================================== */
+
+export async function getNewArrivals() {
+  return cachedPublicRequest(
+    "home:new-arrivals:v1",
+    async () => {
+      const response = await api.get(
+        "/home/new-arrivals"
+      );
+
+      return getResponseData(response);
+    },
+    {
+      ttl: CMS_TTL,
+      persist: false,
+    }
+  );
+}
+
+/* ==========================================================
+   CATEGORY CAMPAIGNS
+========================================================== */
+
+export async function getCategoryCampaigns() {
+  return cachedPublicRequest(
+    "home:category-campaigns:v1",
+    async () => {
+      const response = await api.get(
+        "/home/category-campaigns"
+      );
+
+      return getResponseData(response);
+    },
+    {
+      ttl: CMS_TTL,
+      persist: false,
+    }
+  );
+}
+
+/* ==========================================================
+   CATEGORY BANNERS
+========================================================== */
+
+export async function getCategoryBanners() {
+  return cachedPublicRequest(
+    "home:category-banners:v1",
+    async () => {
+      const response = await api.get(
+        "/home/category-banners"
+      );
+
+      return getResponseData(response);
+    },
+    {
+      ttl: CMS_TTL,
+      persist: false,
+    }
+  );
+}
+
+/* ==========================================================
+   CACHE INVALIDATION
+========================================================== */
+
 export function invalidateHomeCouponsCache() {
   invalidatePublicCache("home:coupons:");
 }
 
 export function invalidateHomeCache() {
   invalidatePublicCache("home:");
+}
+
+/* ==========================================================
+   HOME CONFIGURATION
+========================================================== */
+
+export async function getHomeConfiguration() {
+  return cachedPublicRequest(
+    "home:configuration:v1",
+    async () => {
+      try {
+        const response = await api.get(
+          "/home/configuration",
+          {
+            params: {
+              platform: "web",
+              page: "home",
+            },
+          }
+        );
+
+        return response?.data ?? response;
+      } catch (error) {
+        console.error(
+          "Get home configuration failed:",
+          error
+        );
+
+        throw error;
+      }
+    },
+    {
+      ttl: CMS_TTL,
+      persist: false,
+    }
+  );
 }

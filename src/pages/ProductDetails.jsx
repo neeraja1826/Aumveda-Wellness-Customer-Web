@@ -29,6 +29,11 @@ import {
 } from "../services/productService";
 
 import {
+    getProductReviews,
+    submitProductReview
+} from "../services/reviewService";
+
+import {
     useAuth
 } from "../context/AuthContext";
 
@@ -145,6 +150,16 @@ function ProductDetails() {
 
     const [buyNowLoading, setBuyNowLoading] = useState(false);
 
+    const [reviews, setReviews] = useState([]);
+    const [reviewsProductId, setReviewsProductId] = useState(null);
+    const [reviewsLoading, setReviewsLoading] = useState(true);
+    const [reviewRating, setReviewRating] = useState(5);
+    const [reviewTitle, setReviewTitle] = useState("");
+    const [reviewText, setReviewText] = useState("");
+    const [reviewSubmitting, setReviewSubmitting] = useState(false);
+    const [reviewError, setReviewError] = useState("");
+    const [reviewMessage, setReviewMessage] = useState("");
+
 
     /* ========================================================
        RECENTLY VIEWED TRACKING STATE
@@ -156,6 +171,94 @@ function ProductDetails() {
     ======================================================== */
 
     const recordedProductRef = useRef(null);
+
+    useEffect(() => {
+        if (!product?.id) {
+            return undefined;
+        }
+
+        let active = true;
+        getProductReviews(product.id)
+            .then(reviewList => {
+                if (active) {
+                    setReviews(reviewList);
+                    setReviewsProductId(product.id);
+                }
+            })
+            .catch(reviewLoadError => {
+                console.warn(
+                    "Product reviews could not be loaded:",
+                    reviewLoadError
+                );
+
+                if (active) {
+                    setReviews([]);
+                    setReviewsProductId(product.id);
+                }
+            })
+            .finally(() => {
+                if (active) {
+                    setReviewsLoading(false);
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [product?.id]);
+
+    async function handleSubmitReview(event) {
+        event.preventDefault();
+
+        if (!isAuthenticated) {
+            navigate("/login", {
+                state: {
+                    from: {
+                        pathname: `/products/${product.slug}`
+                    }
+                }
+            });
+            return;
+        }
+
+        try {
+            setReviewSubmitting(true);
+            setReviewError("");
+            setReviewMessage("");
+
+            const result = await submitProductReview({
+                productId: product.id,
+                rating: reviewRating,
+                title: reviewTitle,
+                reviewText
+            });
+
+            const submittedReview = result?.data;
+            if (submittedReview?.id) {
+                setReviews(current => [
+                    submittedReview,
+                    ...current.filter(review => review.id !== submittedReview.id)
+                ]);
+                setReviewsProductId(product.id);
+            }
+
+            setReviewMessage(
+                result?.message ||
+                "Your review is published and now visible."
+            );
+            setReviewTitle("");
+            setReviewText("");
+            setReviewRating(5);
+        } catch (reviewSubmitError) {
+            console.error("Product review submission failed:", reviewSubmitError);
+            setReviewError(
+                reviewSubmitError?.message ||
+                "Unable to submit your review."
+            );
+        } finally {
+            setReviewSubmitting(false);
+        }
+    }
 
 
     /* ========================================================
@@ -417,6 +520,9 @@ function ProductDetails() {
         null;
 
     const hasMultipleImages = productImages.length > 1;
+    const reviewsAreLoading =
+        reviewsLoading ||
+        String(reviewsProductId) !== String(product.id);
 
 
     /* ========================================================
@@ -715,22 +821,9 @@ function ProductDetails() {
                 JSON.stringify(buyNowPayload)
             );
 
-            if (isAuthenticated) {
-
-                navigate("/checkout?mode=buy-now", {
-                    state: {
-                        buyNow: buyNowPayload
-                    }
-                });
-
-                return;
-            }
-
-            navigate("/login", {
+            navigate("/checkout?mode=buy-now", {
                 state: {
-                    from: {
-                        pathname: "/checkout?mode=buy-now"
-                    }
+                    buyNow: buyNowPayload
                 }
             });
 
@@ -1361,6 +1454,133 @@ function ProductDetails() {
                     </section>
 
                 )}
+
+                <section
+                    className="product-details-reviews"
+                    aria-labelledby="product-reviews-heading"
+                >
+                    <div className="product-details-description-header">
+                        <p>SHARE YOUR EXPERIENCE</p>
+                        <h2 id="product-reviews-heading">Customer Reviews</h2>
+                    </div>
+
+                    <form
+                        className="product-review-form"
+                        onSubmit={handleSubmitReview}
+                    >
+                        <strong>Write a review</strong>
+                        <span className="product-review-hint">
+                            Reviews are published immediately. You must have purchased this product to submit a review.
+                        </span>
+
+                        <div
+                            className="product-review-stars"
+                            role="group"
+                            aria-label="Your rating"
+                        >
+                            {[1, 2, 3, 4, 5].map(star => (
+                                <button
+                                    key={star}
+                                    type="button"
+                                    aria-label={`${star} star${star === 1 ? "" : "s"}`}
+                                    aria-pressed={reviewRating === star}
+                                    onClick={() => setReviewRating(star)}
+                                >
+                                    <Star
+                                        size={21}
+                                        fill={star <= reviewRating ? "currentColor" : "none"}
+                                    />
+                                </button>
+                            ))}
+                        </div>
+
+                        <label htmlFor="product-review-title">Title</label>
+                        <input
+                            id="product-review-title"
+                            value={reviewTitle}
+                            onChange={event => setReviewTitle(event.target.value)}
+                            maxLength={120}
+                            placeholder="Summarize your experience"
+                            disabled={reviewSubmitting}
+                        />
+
+                        <label htmlFor="product-review-text">Your review</label>
+                        <textarea
+                            id="product-review-text"
+                            value={reviewText}
+                            onChange={event => setReviewText(event.target.value)}
+                            rows={4}
+                            maxLength={2000}
+                            placeholder="What did you think of this product?"
+                            disabled={reviewSubmitting}
+                        />
+
+                        {reviewError && (
+                            <p className="product-review-message product-review-message--error" role="alert">
+                                {reviewError}
+                            </p>
+                        )}
+                        {reviewMessage && (
+                            <p className="product-review-message product-review-message--success" role="status">
+                                {reviewMessage}
+                            </p>
+                        )}
+
+                        <button
+                            className="product-review-submit"
+                            type="submit"
+                            disabled={reviewSubmitting}
+                        >
+                            {reviewSubmitting ? "Submitting..." : "Submit Review"}
+                        </button>
+                    </form>
+
+                    <div className="product-review-list">
+                        <div className="product-review-list-heading">
+                            <h3>Customer Reviews</h3>
+                            {reviews.length > 0 && (
+                                <span>
+                                    {reviews.length} review{reviews.length === 1 ? "" : "s"}
+                                </span>
+                            )}
+                        </div>
+
+                        {reviewsAreLoading ? (
+                            <p className="product-review-empty" role="status">Loading reviews...</p>
+                        ) : reviews.length === 0 ? (
+                            <p className="product-review-empty">
+                                No reviews yet. Be the first to share your experience.
+                            </p>
+                        ) : (
+                            reviews.map(review => (
+                                <article className="product-review-card" key={review.id}>
+                                    <div className="product-review-card-heading">
+                                        <div aria-label={`${review.rating} out of 5 stars`}>
+                                            {[1, 2, 3, 4, 5].map(star => (
+                                                <Star
+                                                    key={star}
+                                                    size={14}
+                                                    fill={star <= Number(review.rating) ? "currentColor" : "none"}
+                                                />
+                                            ))}
+                                        </div>
+                                        {review.created_at && (
+                                            <time dateTime={review.created_at}>
+                                                {new Date(review.created_at).toLocaleDateString("en-IN", {
+                                                    day: "2-digit",
+                                                    month: "short",
+                                                    year: "numeric"
+                                                })}
+                                            </time>
+                                        )}
+                                    </div>
+                                    {review.title && <h4>{review.title}</h4>}
+                                    {review.review_text && <p>{review.review_text}</p>}
+                                </article>
+                            ))
+                        )}
+                    </div>
+                </section>
 
 
                 {/* =================================================

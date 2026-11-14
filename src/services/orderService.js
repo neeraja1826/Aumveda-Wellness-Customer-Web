@@ -52,7 +52,8 @@ async function requestOrders(
   {
     method = "GET",
     body,
-    signal
+    signal,
+    responseType = "json"
   } = {}
 ) {
   if (!API_BASE_URL) {
@@ -91,11 +92,16 @@ async function requestOrders(
 
     throw new Error(
       "Unable to confirm the server response. " +
-      "Please check My Orders before trying again."
+      "Please check My Orders before trying again.",
+      { cause: error }
     );
   }
 
-  let result = null;
+  if (response.ok && responseType === "blob") {
+    return response.blob();
+  }
+
+  let result;
 
   try {
     result = await response.json();
@@ -293,4 +299,76 @@ export async function createBuyNowOrder({
   );
 
   return confirmOrder(result);
+}
+
+export async function downloadCustomerOrderInvoice(orderId) {
+  if (!orderId) {
+    throw new Error("Order ID is required.");
+  }
+
+  return requestOrders(
+    `/orders/${encodeURIComponent(orderId)}/invoice`,
+    { responseType: "blob" }
+  );
+}
+
+export async function getCustomerOrderReturnRequests(orderId) {
+  const query = orderId
+    ? `?order_id=${encodeURIComponent(orderId)}`
+    : "";
+  const result = await requestOrders(`/returns${query}`);
+  const requests = Array.isArray(result?.items)
+    ? result.items
+    : Array.isArray(result?.data)
+      ? result.data
+      : null;
+
+  if (!requests) {
+    throw new Error(
+      "The return requests response was not in the expected format."
+    );
+  }
+
+  return requests;
+}
+
+export async function createCustomerReturnRequest({
+  orderId,
+  orderItemId,
+  requestType = "return",
+  requestedQuantity = 1,
+  reason,
+  description
+}) {
+  if (!orderId || !orderItemId) {
+    throw new Error("Order and order item IDs are required.");
+  }
+
+  if (!["return", "replacement"].includes(requestType)) {
+    throw new Error("Choose return or replacement.");
+  }
+
+  const quantity = Number(requestedQuantity);
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    throw new Error("Enter a valid return quantity.");
+  }
+
+  const cleanReason = String(reason || "").trim();
+  if (!cleanReason) {
+    throw new Error("Please select a reason for your request.");
+  }
+
+  return requestOrders("/returns", {
+    method: "POST",
+    body: {
+      order_id: orderId,
+      order_item_id: orderItemId,
+      request_type: requestType,
+      requested_quantity: quantity,
+      reason: cleanReason,
+      ...(String(description || "").trim()
+        ? { description: String(description).trim() }
+        : {})
+    }
+  });
 }

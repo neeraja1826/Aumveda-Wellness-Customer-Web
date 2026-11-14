@@ -144,6 +144,21 @@ function Checkout() {
   const isBuyNow =
     searchParams.get("mode") === "buy-now";
 
+  const requestedAddressId =
+    searchParams.get("addressId");
+
+  const authReturnState = {
+    from: {
+      pathname: location.pathname,
+      search: location.search
+    }
+  };
+
+  const addressReturnState = {
+    returnToCheckout: true,
+    checkoutSearch: location.search
+  };
+
   const buyNowData = isBuyNow
     ? (
         location.state?.buyNow ||
@@ -227,32 +242,6 @@ function Checkout() {
   const submittingRef = useRef(false);
 
   /* ========================================================
-     AUTH PROTECTION
-  ======================================================== */
-
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      const destination =
-        `${location.pathname}${location.search}`;
-
-      navigate("/login", {
-        replace: true,
-        state: {
-          from: {
-            pathname: destination
-          }
-        }
-      });
-    }
-  }, [
-    authLoading,
-    isAuthenticated,
-    navigate,
-    location.pathname,
-    location.search
-  ]);
-
-  /* ========================================================
      LOAD ADDRESSES
   ======================================================== */
 
@@ -283,6 +272,12 @@ function Checkout() {
         setAddresses(nextAddresses);
 
         const preferredAddress =
+          nextAddresses.find(
+            address =>
+              requestedAddressId &&
+              String(address.id) ===
+                String(requestedAddressId)
+          ) ||
           nextAddresses.find(
             address => address.is_default
           ) ||
@@ -319,7 +314,8 @@ function Checkout() {
     };
   }, [
     authLoading,
-    user?.id
+    user?.id,
+    requestedAddressId
   ]);
 
   /* ========================================================
@@ -465,10 +461,6 @@ function Checkout() {
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
   if (
     !isBuyNow &&
     cartLoading &&
@@ -512,6 +504,42 @@ function Checkout() {
 
           <Link to="/products">
             Explore Products
+            <ChevronRight size={16} />
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="checkout-page checkout-page--empty">
+        <div className="checkout-empty">
+          <div className="checkout-empty__icon">
+            <ShoppingBag size={32} />
+          </div>
+
+          <span>AUMVEDA CHECKOUT</span>
+
+          <h1>Sign in to continue</h1>
+
+          <p>
+            Sign in or create an account to add a delivery address
+            and continue with your order.
+          </p>
+
+          <Link to="/login" state={authReturnState}>
+            Sign in
+            <ChevronRight size={16} />
+          </Link>
+
+          <Link to="/signup" state={authReturnState}>
+            Create account
+            <ChevronRight size={16} />
+          </Link>
+
+          <Link to={isBuyNow ? "/products" : "/cart"}>
+            Back
             <ChevronRight size={16} />
           </Link>
         </div>
@@ -621,7 +649,10 @@ function Checkout() {
                     </p>
                   </div>
 
-                  <Link to="/profile">
+                  <Link
+                    to="/profile"
+                    state={addressReturnState}
+                  >
                     Add Address
                     <ChevronRight size={14} />
                   </Link>
@@ -701,7 +732,10 @@ function Checkout() {
               )}
 
               <div className="checkout-manage-address">
-                <Link to="/profile">
+                <Link
+                  to="/profile"
+                  state={addressReturnState}
+                >
                   Manage Addresses
                   <ChevronRight size={13} />
                 </Link>

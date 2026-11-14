@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -8,30 +8,34 @@ import {
   ChevronDown,
   ChevronUp,
   CreditCard,
+  Download,
   MapPin,
   Package,
   PackageCheck,
   RefreshCw,
+  RotateCcw,
   ShoppingBag,
   Truck,
   UserRound,
   Wallet,
   XCircle
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 
 import {
+  createCustomerReturnRequest,
+  downloadCustomerOrderInvoice,
   getCustomerOrders,
-  getCustomerOrderDetails
+  getCustomerOrderDetails,
+  getCustomerOrderReturnRequests
 } from "../services/orderService";
 
 import "../styles/orders.css";
 
 /* ============================================================
    AUMVEDA CUSTOMER ORDERS
-   STEP 17H.6
 
    - Authenticated order history
    - Dynamic status filters
@@ -40,7 +44,9 @@ import "../styles/orders.css";
    - Delivery address
    - Payment information
    - Status history
-   - Loading, empty and error states
+   - Refresh without closing expanded orders
+   - Preserve selected status filter
+   - Fetch latest details when reopening orders
 ============================================================ */
 
 const CURRENCY_FALLBACK = "INR";
@@ -52,6 +58,7 @@ const STATUS_ICONS = {
   processing: Package,
   packed: Package,
   shipped: Truck,
+  partially_shipped: Truck,
   out_for_delivery: Truck,
   delivered: PackageCheck,
   completed: PackageCheck,
@@ -75,6 +82,31 @@ function readableStatus(value) {
       word ? word[0].toUpperCase() + word.slice(1) : ""
     )
     .join(" ");
+}
+
+function getLatestReturnRequestByOrder(requests) {
+  return requests.reduce((latestByOrder, request) => {
+    if (!request?.order_id) return latestByOrder;
+
+    const key = String(request.order_id);
+    const existing = latestByOrder.get(key);
+    const requestTime = Date.parse(
+      request.updated_at || request.created_at || ""
+    );
+    const existingTime = Date.parse(
+      existing?.updated_at || existing?.created_at || ""
+    );
+
+    if (
+      !existing ||
+      (Number.isFinite(requestTime) &&
+        (!Number.isFinite(existingTime) || requestTime > existingTime))
+    ) {
+      latestByOrder.set(key, request);
+    }
+
+    return latestByOrder;
+  }, new Map());
 }
 
 function formatMoney(value, currency = CURRENCY_FALLBACK) {
@@ -124,17 +156,22 @@ function formatPaymentMethod(value) {
 function getStatusTone(status) {
   const value = normalizeStatus(status);
 
-  if (["delivered", "completed", "paid", "success"].includes(value)) {
+  if (
+    ["delivered", "completed", "paid", "success"].includes(value)
+  ) {
     return "success";
   }
 
-  if (["cancelled", "canceled", "failed", "refunded"].includes(value)) {
+  if (
+    ["cancelled", "canceled", "failed", "refunded"].includes(value)
+  ) {
     return "danger";
   }
 
   if (
     [
       "shipped",
+      "partially_shipped",
       "out_for_delivery",
       "confirmed",
       "processing",
@@ -165,7 +202,11 @@ function DetailRow({ label, value, strong = false }) {
   return (
     <div className="orders-detail-row">
       <span>{label}</span>
-      <strong className={strong ? "orders-detail-row--strong" : ""}>
+      <strong
+        className={
+          strong ? "orders-detail-row--strong" : ""
+        }
+      >
         {value}
       </strong>
     </div>
@@ -174,7 +215,11 @@ function DetailRow({ label, value, strong = false }) {
 
 function AddressDetails({ address }) {
   if (!address || typeof address !== "object") {
-    return <p className="orders-muted">Not available</p>;
+    return (
+      <p className="orders-muted">
+        Not available
+      </p>
+    );
   }
 
   const recipient =
@@ -205,7 +250,9 @@ function AddressDetails({ address }) {
     address.postal_code ||
       address.postalCode ||
       address.pincode
-  ].filter(Boolean).join(", ");
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const country = address.country || "";
 
@@ -219,13 +266,19 @@ function AddressDetails({ address }) {
   ].filter(Boolean);
 
   if (!lines.length) {
-    return <p className="orders-muted">Not available</p>;
+    return (
+      <p className="orders-muted">
+        Not available
+      </p>
+    );
   }
 
   return (
     <address className="orders-address">
       {lines.map((line, index) => (
-        <span key={`${index}-${line}`}>{line}</span>
+        <span key={`${index}-${line}`}>
+          {line}
+        </span>
       ))}
     </address>
   );
@@ -257,11 +310,15 @@ function OrderItems({ items, currency }) {
             </strong>
 
             {item.variant_name && (
-              <small>{item.variant_name}</small>
+              <small>
+                {item.variant_name}
+              </small>
             )}
 
             {item.sku && (
-              <small>SKU: {item.sku}</small>
+              <small>
+                SKU: {item.sku}
+              </small>
             )}
 
             <span>
@@ -272,11 +329,16 @@ function OrderItems({ items, currency }) {
 
           <div className="orders-item__right">
             <strong>
-              {formatMoney(item.total_price, currency)}
+              {formatMoney(
+                item.total_price,
+                currency
+              )}
             </strong>
 
             {item.status && (
-              <span>{readableStatus(item.status)}</span>
+              <span>
+                {readableStatus(item.status)}
+              </span>
             )}
           </div>
         </div>
@@ -315,12 +377,22 @@ function OrderHistory({ history, currentStatus }) {
           <span className="orders-timeline__dot" />
 
           <div>
-            <strong>{readableStatus(entry.status)}</strong>
+            <strong>
+              {readableStatus(entry.status)}
+            </strong>
+
             <small>
-              {formatDate(entry.created_at, true)}
+              {formatDate(
+                entry.created_at,
+                true
+              )}
             </small>
 
-            {entry.notes && <p>{entry.notes}</p>}
+            {entry.notes && (
+              <p>
+                {entry.notes}
+              </p>
+            )}
           </div>
         </li>
       ))}
@@ -329,19 +401,25 @@ function OrderHistory({ history, currentStatus }) {
 }
 
 function OrderPayments({ payments, order }) {
-  const entries = Array.isArray(payments) ? payments : [];
+  const entries = Array.isArray(payments)
+    ? payments
+    : [];
 
   if (!entries.length) {
     return (
       <div className="orders-payment-summary">
         <DetailRow
           label="Payment Method"
-          value={formatPaymentMethod(order.payment_method)}
+          value={formatPaymentMethod(
+            order.payment_method
+          )}
         />
 
         <DetailRow
           label="Payment Status"
-          value={readableStatus(order.payment_status)}
+          value={readableStatus(
+            order.payment_status
+          )}
         />
       </div>
     );
@@ -356,7 +434,9 @@ function OrderPayments({ payments, order }) {
         >
           <DetailRow
             label="Method"
-            value={formatPaymentMethod(payment.payment_method)}
+            value={formatPaymentMethod(
+              payment.payment_method
+            )}
           />
 
           <DetailRow
@@ -369,12 +449,16 @@ function OrderPayments({ payments, order }) {
 
           <DetailRow
             label="Status"
-            value={readableStatus(payment.status)}
+            value={readableStatus(
+              payment.status
+            )}
           />
 
           <DetailRow
             label="Date"
-            value={formatDate(payment.created_at)}
+            value={formatDate(
+              payment.created_at
+            )}
           />
         </div>
       ))}
@@ -382,14 +466,274 @@ function OrderPayments({ payments, order }) {
   );
 }
 
+export function OrderManagementActions({ order }) {
+  const [returnRequests, setReturnRequests] = useState([]);
+  const [returnLoading, setReturnLoading] = useState(true);
+  const [returnError, setReturnError] = useState("");
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceError, setInvoiceError] = useState("");
+  const [formItemId, setFormItemId] = useState(null);
+  const [requestType, setRequestType] = useState("return");
+  const [requestedQuantity, setRequestedQuantity] = useState("1");
+  const [reason, setReason] = useState("damaged_product");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [submitSuccess, setSubmitSuccess] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    getCustomerOrderReturnRequests(order.id)
+      .then(requests => {
+        if (active) setReturnRequests(requests);
+      })
+      .catch(requestError => {
+        console.error("Order return requests failed:", requestError);
+        if (active) {
+          setReturnError(
+            requestError?.message ||
+            "Unable to load return details."
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setReturnLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [order.id]);
+
+  async function handleInvoiceDownload() {
+    try {
+      setInvoiceLoading(true);
+      setInvoiceError("");
+
+      const invoice = await downloadCustomerOrderInvoice(order.id);
+      const url = window.URL.createObjectURL(invoice);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${order.order_number || order.id}-invoice.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (downloadError) {
+      console.error("Order invoice download failed:", downloadError);
+      setInvoiceError(
+        downloadError?.message ||
+        "Unable to download the invoice."
+      );
+    } finally {
+      setInvoiceLoading(false);
+    }
+  }
+
+  async function handleReturnSubmit(event, item) {
+    event.preventDefault();
+    const quantity = Number(requestedQuantity);
+    const availableQuantity = Number(item.quantity) || 0;
+
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > availableQuantity
+    ) {
+      setSubmitError(
+        `Enter a quantity between 1 and ${availableQuantity}.`
+      );
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setSubmitError("");
+      setSubmitSuccess("");
+
+      await createCustomerReturnRequest({
+        orderId: order.id,
+        orderItemId: item.id,
+        requestType,
+        requestedQuantity: quantity,
+        reason,
+        description
+      });
+
+      const requests =
+        await getCustomerOrderReturnRequests(order.id);
+      setReturnRequests(requests);
+      setFormItemId(null);
+      setDescription("");
+      setRequestedQuantity("1");
+      setSubmitSuccess("Your request has been submitted.");
+    } catch (requestError) {
+      console.error("Order return request failed:", requestError);
+      setSubmitError(
+        requestError?.message ||
+        "Unable to submit your request."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const items = Array.isArray(order.items) ? order.items : [];
+  const canRequestReturn =
+    normalizeStatus(order.status) === "delivered";
+
+  return (
+    <section className="orders-expanded-section orders-actions-section">
+      <div className="orders-section-heading">
+        <RotateCcw size={17} />
+        <h3>Invoices & Returns</h3>
+      </div>
+
+      <button
+        type="button"
+        className="orders-action-button"
+        onClick={handleInvoiceDownload}
+        disabled={invoiceLoading}
+      >
+        <Download size={15} />
+        {invoiceLoading ? "Preparing invoice..." : "Download Invoice"}
+      </button>
+      {invoiceError && (
+        <p className="orders-action-error" role="alert">{invoiceError}</p>
+      )}
+
+      {returnLoading ? (
+        <p className="orders-muted">Loading return information...</p>
+      ) : returnError ? (
+        <p className="orders-action-error" role="alert">{returnError}</p>
+      ) : canRequestReturn ? (
+        <div className="orders-return-list">
+          {items.map((item, index) => {
+            const existingRequest = returnRequests.find(
+              request =>
+                String(request.order_item_id) === String(item.id)
+            );
+            const isOpen = String(formItemId) === String(item.id);
+
+            return (
+              <div
+                className="orders-return-item"
+                key={item.id || `${item.product_id}-${index}`}
+              >
+                <div>
+                  <strong>{item.product_name || "Ordered product"}</strong>
+                  {existingRequest ? (
+                    <span>
+                      Request: {readableStatus(existingRequest.status)}
+                    </span>
+                  ) : (
+                    <span>Qty: {item.quantity}</span>
+                  )}
+                </div>
+
+                {!existingRequest && item.id && (
+                  <>
+                    <button
+                      type="button"
+                      className="orders-action-button orders-action-button--secondary"
+                      onClick={() => {
+                        setFormItemId(isOpen ? null : item.id);
+                        setRequestType("return");
+                        setRequestedQuantity("1");
+                        setReason("damaged_product");
+                        setDescription("");
+                        setSubmitError("");
+                        setSubmitSuccess("");
+                      }}
+                    >
+                      {isOpen ? "Cancel" : "Request Return / Replacement"}
+                    </button>
+
+                    {isOpen && (
+                      <form
+                        className="orders-return-form"
+                        onSubmit={event => handleReturnSubmit(event, item)}
+                      >
+                        <label>
+                          Request type
+                          <select
+                            value={requestType}
+                            onChange={event => setRequestType(event.target.value)}
+                          >
+                            <option value="return">Return & refund</option>
+                            <option value="replacement">Replacement</option>
+                          </select>
+                        </label>
+                        <label>
+                          Quantity (max {item.quantity})
+                          <input
+                            type="number"
+                            min="1"
+                            max={item.quantity}
+                            value={requestedQuantity}
+                            onChange={event => setRequestedQuantity(event.target.value)}
+                            required
+                          />
+                        </label>
+                        <label>
+                          Reason
+                          <select
+                            value={reason}
+                            onChange={event => setReason(event.target.value)}
+                          >
+                            <option value="damaged_product">Damaged product</option>
+                            <option value="wrong_item">Wrong item</option>
+                            <option value="quality_issue">Quality issue</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </label>
+                        <label>
+                          Additional details (optional)
+                          <textarea
+                            rows="3"
+                            maxLength="1000"
+                            value={description}
+                            onChange={event => setDescription(event.target.value)}
+                          />
+                        </label>
+                        {submitError && (
+                          <p className="orders-action-error" role="alert">{submitError}</p>
+                        )}
+                        <button
+                          type="submit"
+                          className="orders-action-button"
+                          disabled={submitting}
+                        >
+                          {submitting ? "Submitting..." : "Submit Request"}
+                        </button>
+                      </form>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {submitSuccess && (
+            <p className="orders-action-success" role="status">{submitSuccess}</p>
+          )}
+        </div>
+      ) : (
+        <p className="orders-muted">
+          Return or replacement requests are available after delivery.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function OrderExpandedDetails({
-  order,
   details,
   loading,
   error,
   onRetry
 }) {
-  if (loading) {
+  if (loading && !details) {
     return (
       <div className="orders-expanded-loading">
         <span className="orders-spinner" />
@@ -398,11 +742,15 @@ function OrderExpandedDetails({
     );
   }
 
-  if (error) {
+  if (error && !details) {
     return (
       <div className="orders-inline-error">
         <p>{error}</p>
-        <button type="button" onClick={onRetry}>
+
+        <button
+          type="button"
+          onClick={onRetry}
+        >
           <RefreshCw size={14} />
           Try Again
         </button>
@@ -413,10 +761,38 @@ function OrderExpandedDetails({
   if (!details) return null;
 
   const currentOrder = details;
-  const currency = currentOrder.currency || CURRENCY_FALLBACK;
+  const currency =
+    currentOrder.currency || CURRENCY_FALLBACK;
 
   return (
     <div className="orders-expanded">
+      {loading && (
+        <div
+          className="orders-expanded-loading"
+          aria-live="polite"
+        >
+          <span className="orders-spinner" />
+          Updating order details...
+        </div>
+      )}
+
+      {error && (
+        <div
+          className="orders-inline-error"
+          role="alert"
+        >
+          <p>{error}</p>
+
+          <button
+            type="button"
+            onClick={onRetry}
+          >
+            <RefreshCw size={14} />
+            Try Again
+          </button>
+        </div>
+      )}
+
       <section className="orders-expanded-section">
         <div className="orders-section-heading">
           <ShoppingBag size={17} />
@@ -428,6 +804,8 @@ function OrderExpandedDetails({
           currency={currency}
         />
       </section>
+
+      <OrderManagementActions order={currentOrder} />
 
       <div className="orders-expanded-grid">
         <section className="orders-expanded-section">
@@ -507,7 +885,10 @@ function OrderExpandedDetails({
             />
 
             <div className="orders-total-line">
-              <strong>Total</strong>
+              <strong>
+                Total
+              </strong>
+
               <strong>
                 {formatMoney(
                   currentOrder.total_amount,
@@ -522,7 +903,9 @@ function OrderExpandedDetails({
       {currentOrder.customer_notes && (
         <section className="orders-expanded-section">
           <div className="orders-section-heading">
-            <h3>Order Notes</h3>
+            <h3>
+              Order Notes
+            </h3>
           </div>
 
           <p className="orders-notes">
@@ -536,6 +919,8 @@ function OrderExpandedDetails({
 
 function OrderCard({
   order,
+  returnRequest,
+  onOpen,
   expanded,
   details,
   loading,
@@ -543,13 +928,58 @@ function OrderCard({
   onToggle,
   onRetry
 }) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const firstItem = items[0];
+  const productImages = firstItem?.product?.product_images || [];
+  const productImage =
+    firstItem?.image_url ||
+    firstItem?.product?.image_url ||
+    productImages.find(image => image.is_primary)?.image_url ||
+    productImages[0]?.image_url;
+  const productName =
+    firstItem?.product_name ||
+    firstItem?.product?.name ||
+    "Order items";
+  const quantity = Number(firstItem?.quantity) || 1;
+  const itemAmount =
+    firstItem?.total_price ??
+    (Number(firstItem?.unit_price) || 0) * quantity;
+  const orderTotal =
+    order.total_amount ??
+    order.total_price ??
+    order.total ??
+    order.grand_total ??
+    items.reduce(
+      (sum, item) =>
+        sum +
+        (Number(item.total_price) ||
+          (Number(item.unit_price) || 0) * (Number(item.quantity) || 1)),
+      0
+    );
+
   return (
-    <article className="orders-card">
+    <article
+      className="orders-card orders-card--clickable"
+      role="link"
+      tabIndex={0}
+      aria-label={`Open order ${order.order_number || order.id}`}
+      onClick={onOpen}
+      onKeyDown={event => {
+        if (
+          event.target === event.currentTarget &&
+          (event.key === "Enter" || event.key === " ")
+        ) {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+    >
       <div className="orders-card__header">
         <div className="orders-card__identity">
           <span className="orders-card__eyebrow">
             ORDER NUMBER
           </span>
+
           <h2>
             {order.order_number || order.id}
           </h2>
@@ -558,9 +988,47 @@ function OrderCard({
         <StatusBadge status={order.status} />
       </div>
 
+      {returnRequest && (
+        <div className="orders-card__return-status">
+          <RotateCcw size={14} />
+          <span>
+            {returnRequest.request_type === "replacement"
+              ? "Replacement"
+              : "Return"}{" "}
+            status: <strong>{readableStatus(returnRequest.status)}</strong>
+          </span>
+        </div>
+      )}
+
+      <div className="orders-card__product">
+        <div className="orders-card__product-image">
+          {productImage ? (
+            <img src={productImage} alt="" />
+          ) : (
+            <Package size={23} />
+          )}
+        </div>
+        <div className="orders-card__product-info">
+          <strong>{productName}</strong>
+          {firstItem?.variant_name && <span>{firstItem.variant_name}</span>}
+          {firstItem && (
+            <span>
+              Qty: {quantity} · {formatMoney(itemAmount, order.currency)}
+            </span>
+          )}
+          {items.length > 1 && (
+            <span>
+              +{items.length - 1} more{" "}
+              {items.length === 2 ? "item" : "items"}
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className="orders-card__details">
         <div>
           <CalendarDays size={15} />
+
           <span>
             {formatDate(order.created_at)}
           </span>
@@ -568,46 +1036,58 @@ function OrderCard({
 
         <div>
           <CreditCard size={15} />
+
           <span>
-            {formatPaymentMethod(order.payment_method)}
+            {formatPaymentMethod(
+              order.payment_method
+            )}
           </span>
         </div>
 
         <div>
           <Wallet size={15} />
+
           <span>
-            Payment: {readableStatus(order.payment_status)}
+            Payment:{" "}
+            {readableStatus(
+              order.payment_status
+            )}
           </span>
         </div>
       </div>
 
       <div className="orders-card__footer">
         <div className="orders-card__total">
-          <span>Order Total</span>
+          <span>
+            Order Total
+          </span>
+
           <strong>
             {formatMoney(
-              order.total_amount,
+              orderTotal,
               order.currency
             )}
           </strong>
         </div>
 
-        <button
-          type="button"
-          className="orders-card__toggle"
-          onClick={() => onToggle(order.id)}
-          aria-expanded={expanded}
-        >
-          {expanded ? "Hide Details" : "View Details"}
-          {expanded
-            ? <ChevronUp size={16} />
-            : <ChevronDown size={16} />}
-        </button>
+        <div className="orders-card__actions">
+          <button
+            type="button"
+            className="orders-card__quick-toggle"
+            onClick={event => {
+              event.stopPropagation();
+              onToggle(order.id);
+            }}
+            aria-expanded={expanded}
+          >
+            {expanded ? "Hide quick view" : "Quick view"}
+            {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </button>
+        </div>
       </div>
 
       {expanded && (
         <OrderExpandedDetails
-          order={order}
           details={details}
           loading={loading}
           error={error}
@@ -623,6 +1103,7 @@ function OrderCard({
 ============================================================ */
 
 function Orders() {
+  const navigate = useNavigate();
   const {
     user,
     loading: authLoading,
@@ -632,6 +1113,13 @@ function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [returnRequestsByOrder, setReturnRequestsByOrder] = useState(new Map());
+  const [returnStatusError, setReturnStatusError] = useState("");
+
+  const hasLoadedOrders = useRef(false);
+  const latestDetailRequest = useRef({});
+  const detailsController = useRef({});
 
   const [filter, setFilter] = useState("all");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -639,34 +1127,75 @@ function Orders() {
   const [expandedOrderId, setExpandedOrderId] =
     useState(null);
 
-  const [detailsById, setDetailsById] = useState({});
+  const [detailsById, setDetailsById] =
+    useState({});
+
   const [detailLoadingId, setDetailLoadingId] =
     useState(null);
-  const [detailErrors, setDetailErrors] = useState({});
+
+  const [detailErrors, setDetailErrors] =
+    useState({});
+
+  /* ============================================================
+     LOAD CUSTOMER ORDERS
+  ============================================================ */
 
   useEffect(() => {
     if (authLoading) return;
 
     if (!isAuthenticated || !user?.id) {
       setOrders([]);
+      setReturnRequestsByOrder(new Map());
+      setReturnStatusError("");
       setLoading(false);
+      setRefreshing(false);
+      hasLoadedOrders.current = false;
       return;
     }
 
     const controller = new AbortController();
 
     async function loadOrders() {
-      try {
-        setLoading(true);
-        setError("");
+      const firstLoad = !hasLoadedOrders.current;
 
-        const result = await getCustomerOrders(
-          controller.signal
-        );
+      if (firstLoad) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+
+      setError("");
+      setReturnStatusError("");
+
+      try {
+        const [ordersResult, returnRequestsResult] = await Promise.allSettled([
+          getCustomerOrders(controller.signal),
+          getCustomerOrderReturnRequests()
+        ]);
 
         if (controller.signal.aborted) return;
+        if (ordersResult.status === "rejected") {
+          throw ordersResult.reason;
+        }
 
-        setOrders(result);
+        setOrders(ordersResult.value);
+        hasLoadedOrders.current = true;
+
+        if (returnRequestsResult.status === "fulfilled") {
+          setReturnRequestsByOrder(
+            getLatestReturnRequestByOrder(returnRequestsResult.value)
+          );
+        } else {
+          console.error(
+            "Customer order return status loading failed:",
+            returnRequestsResult.reason
+          );
+          setReturnRequestsByOrder(new Map());
+          setReturnStatusError(
+            "Return request statuses could not be loaded."
+          );
+        }
+
       } catch (requestError) {
         if (controller.signal.aborted) return;
 
@@ -679,16 +1208,21 @@ function Orders() {
           requestError?.message ||
           "Unable to load your orders."
         );
+
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
+          setRefreshing(false);
         }
       }
     }
 
     loadOrders();
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+    };
+
   }, [
     authLoading,
     isAuthenticated,
@@ -696,43 +1230,130 @@ function Orders() {
     refreshKey
   ]);
 
+  /* ============================================================
+     CLEAN UP DETAIL REQUESTS
+  ============================================================ */
+
+  useEffect(() => {
+    return () => {
+      Object.values(
+        detailsController.current
+      ).forEach(controller => {
+        controller.abort();
+      });
+
+      detailsController.current = {};
+    };
+  }, [user?.id]);
+
+  /* ============================================================
+     DYNAMIC STATUS FILTERS
+  ============================================================ */
+
   const filters = useMemo(() => {
-    const statusValues = [...new Set(
-      orders.map(order => normalizeStatus(order.status))
-    )];
+    const statusValues = [
+      ...new Set(
+        orders.map(order =>
+          normalizeStatus(order.status)
+        )
+      )
+    ];
 
     return [
-      { value: "all", label: "All Orders" },
-      ...statusValues.sort().map(statusValue => ({
-        value: statusValue,
-        label: readableStatus(statusValue)
-      }))
+      {
+        value: "all",
+        label: "All Orders"
+      },
+
+      ...statusValues.sort().map(
+        statusValue => ({
+          value: statusValue,
+          label: readableStatus(statusValue)
+        })
+      )
     ];
   }, [orders]);
 
   const filteredOrders = useMemo(() => {
-    if (filter === "all") return orders;
+    if (filter === "all") {
+      return orders;
+    }
 
     return orders.filter(
-      order => normalizeStatus(order.status) === filter
+      order =>
+        normalizeStatus(order.status) === filter
     );
   }, [orders, filter]);
 
+  /* ============================================================
+     LOAD FRESH ORDER DETAILS
+  ============================================================ */
+
   async function loadOrderDetails(orderId) {
+    // Cancel an older request for the same order.
+    detailsController.current[orderId]?.abort();
+
+    const controller = new AbortController();
+
+    detailsController.current[orderId] =
+      controller;
+
+    const requestId =
+      (latestDetailRequest.current[orderId] || 0) + 1;
+
+    latestDetailRequest.current[orderId] =
+      requestId;
+
+    const isCurrent = () =>
+      !controller.signal.aborted &&
+      latestDetailRequest.current[orderId] ===
+        requestId;
+
     try {
       setDetailLoadingId(orderId);
+
       setDetailErrors(previous => ({
         ...previous,
         [orderId]: ""
       }));
 
-      const result = await getCustomerOrderDetails(orderId);
+      const result =
+        await getCustomerOrderDetails(
+          orderId,
+          controller.signal
+        );
 
+      if (!isCurrent()) return;
+
+      // Update the expanded order's data.
       setDetailsById(previous => ({
         ...previous,
         [orderId]: result
       }));
+
+      // Keep its order card status in sync too.
+      if (result?.status) {
+        setOrders(previous =>
+          previous.map(order =>
+            order.id === orderId
+              ? {
+                  ...order,
+                  status: result.status,
+                  updated_at: result.updated_at
+                }
+              : order
+          )
+        );
+      }
+
     } catch (requestError) {
+      if (
+        !isCurrent() ||
+        requestError?.name === "AbortError"
+      ) {
+        return;
+      }
+
       console.error(
         "Customer order details failed:",
         requestError
@@ -744,12 +1365,23 @@ function Orders() {
           requestError?.message ||
           "Unable to load order details."
       }));
+
     } finally {
-      setDetailLoadingId(current =>
-        current === orderId ? null : current
-      );
+      if (isCurrent()) {
+        setDetailLoadingId(current =>
+          current === orderId
+            ? null
+            : current
+        );
+
+        delete detailsController.current[orderId];
+      }
     }
   }
+
+  /* ============================================================
+     EXPAND / COLLAPSE ORDER
+  ============================================================ */
 
   function handleToggle(orderId) {
     if (expandedOrderId === orderId) {
@@ -759,37 +1391,52 @@ function Orders() {
 
     setExpandedOrderId(orderId);
 
-    if (!detailsById[orderId]) {
-      loadOrderDetails(orderId);
+    // Always fetch fresh tracking information
+    // when opening or reopening an order.
+    loadOrderDetails(orderId);
+  }
+
+  /* ============================================================
+     REFRESH WITHOUT RESETTING THE PAGE
+  ============================================================ */
+
+  function refreshOrders() {
+    if (loading || refreshing) {
+      return;
+    }
+
+    // Preserve:
+    // - selected filter
+    // - expanded order
+    // - current order details
+    setRefreshKey(value => value + 1);
+
+    if (expandedOrderId) {
+      loadOrderDetails(expandedOrderId);
     }
   }
 
-  function refreshOrders() {
-    setExpandedOrderId(null);
-    setDetailsById({});
-    setDetailErrors({});
-    setFilter("all");
-    setRefreshKey(value => value + 1);
-  }
-
-  /* ========================================================
-     AUTH LOADING
-  ======================================================== */
+  /* ============================================================
+     AUTHENTICATION LOADING
+  ============================================================ */
 
   if (authLoading) {
     return (
       <main className="orders-page orders-page--state">
         <div className="orders-state">
           <span className="orders-spinner" />
-          <p>Checking your account...</p>
+
+          <p>
+            Checking your account...
+          </p>
         </div>
       </main>
     );
   }
 
-  /* ========================================================
+  /* ============================================================
      NOT SIGNED IN
-  ======================================================== */
+  ============================================================ */
 
   if (!isAuthenticated) {
     return (
@@ -799,7 +1446,9 @@ function Orders() {
             <UserRound size={28} />
           </div>
 
-          <h1>Sign In to View Orders</h1>
+          <h1>
+            Sign In to View Orders
+          </h1>
 
           <p>
             Access your purchases, delivery information
@@ -817,6 +1466,10 @@ function Orders() {
       </main>
     );
   }
+
+  /* ============================================================
+     MAIN PAGE
+  ============================================================ */
 
   return (
     <main className="orders-page">
@@ -838,7 +1491,9 @@ function Orders() {
               MY ACCOUNT
             </span>
 
-            <h1>My Orders</h1>
+            <h1>
+              My Orders
+            </h1>
 
             <p>
               View your purchases and stay updated
@@ -850,10 +1505,13 @@ function Orders() {
             type="button"
             className="orders-refresh-button"
             onClick={refreshOrders}
-            disabled={loading}
+            disabled={loading || refreshing}
           >
             <RefreshCw size={15} />
-            Refresh
+
+            {refreshing
+              ? "Refreshing..."
+              : "Refresh"}
           </button>
         </header>
 
@@ -865,7 +1523,10 @@ function Orders() {
           </div>
 
           <div>
-            <span>YOUR ORDER HISTORY</span>
+            <span>
+              YOUR ORDER HISTORY
+            </span>
+
             <strong>
               {loading
                 ? "Loading orders..."
@@ -878,20 +1539,47 @@ function Orders() {
           </div>
         </section>
 
-        {/* LOADING */}
+        {/* REFRESH ERROR */}
+
+        {error && orders.length > 0 && (
+          <div
+            className="orders-inline-error"
+            role="alert"
+          >
+            <p>
+              Could not refresh orders: {error}
+            </p>
+
+            <button
+              type="button"
+              onClick={refreshOrders}
+            >
+              <RefreshCw size={14} />
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {/* LOADING / ERROR / EMPTY STATES */}
 
         {loading ? (
           <div className="orders-state orders-state--inline">
             <span className="orders-spinner" />
-            <p>Loading your orders...</p>
+            <p>
+              Loading your orders...
+            </p>
           </div>
-        ) : error ? (
+
+        ) : error && orders.length === 0 ? (
           <div className="orders-state orders-state--inline">
             <div className="orders-state__icon">
               <XCircle size={26} />
             </div>
 
-            <h2>Unable to Load Orders</h2>
+            <h2>
+              Unable to Load Orders
+            </h2>
+
             <p>{error}</p>
 
             <button
@@ -903,13 +1591,16 @@ function Orders() {
               Try Again
             </button>
           </div>
+
         ) : orders.length === 0 ? (
           <div className="orders-state orders-state--inline">
             <div className="orders-state__icon">
               <Package size={28} />
             </div>
 
-            <h2>No Orders Yet</h2>
+            <h2>
+              No Orders Yet
+            </h2>
 
             <p>
               Your purchases will appear here once
@@ -924,6 +1615,7 @@ function Orders() {
               <ArrowRight size={16} />
             </Link>
           </div>
+
         ) : (
           <>
             {/* STATUS FILTERS */}
@@ -939,12 +1631,16 @@ function Orders() {
                       ? " orders-filter--active"
                       : "")
                   }
-                  onClick={() => setFilter(option.value)}
+                  onClick={() =>
+                    setFilter(option.value)
+                  }
                 >
                   {option.label}
                 </button>
               ))}
             </div>
+
+            {/* RESULT COUNT */}
 
             <div className="orders-results-count">
               Showing {filteredOrders.length} of{" "}
@@ -953,32 +1649,57 @@ function Orders() {
 
             {/* ORDER CARDS */}
 
+            {returnStatusError && (
+              <p className="orders-action-error" role="status">
+                {returnStatusError}
+              </p>
+            )}
+
             {filteredOrders.length ? (
               <div className="orders-list">
                 {filteredOrders.map(order => (
                   <OrderCard
                     key={order.id}
                     order={order}
-                    expanded={expandedOrderId === order.id}
-                    details={detailsById[order.id]}
-                    loading={detailLoadingId === order.id}
-                    error={detailErrors[order.id]}
+                    returnRequest={returnRequestsByOrder.get(String(order.id))}
+                    onOpen={() =>
+                      navigate(`/orders/${encodeURIComponent(order.id)}`)
+                    }
+                    expanded={
+                      expandedOrderId === order.id
+                    }
+                    details={
+                      detailsById[order.id]
+                    }
+                    loading={
+                      detailLoadingId === order.id
+                    }
+                    error={
+                      detailErrors[order.id]
+                    }
                     onToggle={handleToggle}
                     onRetry={loadOrderDetails}
                   />
                 ))}
               </div>
+
             ) : (
               <div className="orders-filter-empty">
                 <Package size={25} />
-                <h3>No Matching Orders</h3>
+
+                <h3>
+                  No Matching Orders
+                </h3>
+
                 <p>
                   There are no orders with this status.
                 </p>
 
                 <button
                   type="button"
-                  onClick={() => setFilter("all")}
+                  onClick={() =>
+                    setFilter("all")
+                  }
                 >
                   View All Orders
                 </button>

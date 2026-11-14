@@ -1,206 +1,200 @@
-
 import api from "./api";
 
 import {
-    cachedPublicRequest,
-    createPublicCacheKey,
-    invalidatePublicCache
+  cachedPublicRequest,
+  createPublicCacheKey,
+  invalidatePublicCache,
 } from "./publicRequestCache";
-
-/* ============================================================
-   AUMVEDA — CUSTOMER PRODUCT SERVICE
-
-   Public product API caching:
-   - Products: 5 minutes
-   - Categories: 30 minutes
-   - Product details: 5 minutes
-
-   Recently Viewed:
-   - Record authenticated product views
-   - Retrieve customer-specific browsing history
-   - No public caching for personal data
-
-   Existing endpoints and response formats preserved.
-============================================================ */
 
 const PRODUCT_TTL = 5 * 60 * 1000;
 const CATEGORY_TTL = 30 * 60 * 1000;
 
-/* ============================================================
-   GET ALL PRODUCTS
-============================================================ */
+/* ==========================================================
+   PRODUCTS
+========================================================== */
 
 export async function getProducts(params = {}) {
-    const cacheKey = createPublicCacheKey(
-        "products:list",
-        params
-    );
+  const cacheKey = createPublicCacheKey(
+    "products:list",
+    params
+  );
 
-    return cachedPublicRequest(
-        cacheKey,
-        async () => {
-            try {
-                const response = await api.get(
-                    "/products",
-                    { params }
-                );
+  return cachedPublicRequest(
+    cacheKey,
+    async () => {
+      try {
+        const response = await api.get(
+          "/products",
+          {
+            params,
+          }
+        );
 
-                return Array.isArray(response)
-                    ? response
-                    : response?.data || [];
+        return Array.isArray(response)
+          ? response
+          : response?.data || [];
+      } catch (error) {
+        console.error(
+          "Get products API failed:",
+          error
+        );
 
-            } catch (error) {
-                console.error(
-                    "Get products API failed:",
-                    error
-                );
-
-                throw error;
-            }
-        },
-        {
-            ttl: PRODUCT_TTL,
-            persist: true
-        }
-    );
+        throw error;
+      }
+    },
+    {
+      ttl: PRODUCT_TTL,
+      persist: true,
+    }
+  );
 }
 
-/* ============================================================
-   GET CATEGORIES
-============================================================ */
+/* ==========================================================
+   CATEGORIES
+========================================================== */
 
 export async function getCategories() {
-    return cachedPublicRequest(
-        "products:categories",
-        async () => {
-            try {
-                const response = await api.get(
-                    "/products/categories"
-                );
+  return cachedPublicRequest(
+    "products:categories",
+    async () => {
+      try {
+        const response = await api.get(
+          "/categories"
+        );
 
-                return Array.isArray(response)
-                    ? response
-                    : response?.data || [];
+        return Array.isArray(response)
+          ? response
+          : response?.data || [];
+      } catch (error) {
+        console.error(
+          "Get categories API failed:",
+          error
+        );
 
-            } catch (error) {
-                console.error(
-                    "Get categories API failed:",
-                    error
-                );
-
-                throw error;
-            }
-        },
-        {
-            ttl: CATEGORY_TTL,
-            persist: true
-        }
-    );
+        throw error;
+      }
+    },
+    {
+      ttl: CATEGORY_TTL,
+      persist: true,
+    }
+  );
 }
 
-/* ============================================================
-   GET PRODUCT BY SLUG
-============================================================ */
+/* ==========================================================
+   PRODUCT DETAILS
+========================================================== */
 
 export async function getProductBySlug(slug) {
-    if (!slug) {
-        throw new Error(
-            "Product slug is required"
-        );
+  if (!slug) {
+    throw new Error(
+      "Product slug is required"
+    );
+  }
+
+  const cacheKey = createPublicCacheKey(
+    "products:detail",
+    {
+      slug,
     }
+  );
 
-    const cacheKey = createPublicCacheKey(
-        "products:detail",
-        { slug }
-    );
+  return cachedPublicRequest(
+    cacheKey,
+    async () => {
+      try {
+        const response = await api.get(
+          `/products/${encodeURIComponent(slug)}`
+        );
 
-    return cachedPublicRequest(
-        cacheKey,
-        async () => {
-            try {
-                const response = await api.get(
-                    `/products/${encodeURIComponent(slug)}`
-                );
+        return Array.isArray(response)
+          ? response[0]
+          : response?.data || response;
+      } catch (error) {
+        console.error(
+          "Get product details failed:",
+          error
+        );
 
-                return Array.isArray(response)
-                    ? response[0]
-                    : response?.data || response;
-
-            } catch (error) {
-                console.error(
-                    "Get product details failed:",
-                    error
-                );
-
-                throw error;
-            }
-        },
-        {
-            ttl: PRODUCT_TTL,
-            persist: true
-        }
-    );
+        throw error;
+      }
+    },
+    {
+      ttl: PRODUCT_TTL,
+      persist: true,
+    }
+  );
 }
 
-/* ============================================================
-   RECORD RECENTLY VIEWED PRODUCT
+/* ==========================================================
+   RECENTLY VIEWED - RECORD PRODUCT VIEW
+========================================================== */
 
-   Endpoint:
-   POST /api/v1/recently-viewed/{product_id}
+export async function recordRecentlyViewedProduct(
+  productId
+) {
+  if (!productId) {
+    throw new Error(
+      "Product ID is required to record a view."
+    );
+  }
 
-   Authentication is provided by the existing api client.
-
-   The backend derives customer_id from the access token.
-============================================================ */
-
-export async function recordRecentlyViewedProduct(productId) {
-    if (!productId) {
-        throw new Error(
-            "Product ID is required to record a view."
-        );
-    }
-
+  try {
     const response = await api.post(
-        `/recently-viewed/${encodeURIComponent(productId)}`,
-        {}
+      `/products/${encodeURIComponent(productId)}/view`,
+      {}
     );
 
     return response?.data ?? response;
+  } catch (error) {
+    console.error(
+      "Record recently viewed product failed:",
+      error
+    );
+
+    throw error;
+  }
 }
 
-/* ============================================================
-   GET RECENTLY VIEWED PRODUCTS
-
-   Endpoint:
-   GET /api/v1/recently-viewed
-
-   Important:
-   - Authenticated endpoint
-   - No localStorage caching
-   - No publicRequestCache
-   - Customer data is kept account-specific
-============================================================ */
+/* ==========================================================
+   RECENTLY VIEWED PRODUCTS
+========================================================== */
 
 export async function getRecentlyViewedProducts() {
+  try {
     const response = await api.get(
-        "/recently-viewed"
+      "/products/recently-viewed"
     );
 
     if (Array.isArray(response)) {
-        return response;
+      return response;
     }
 
-    if (Array.isArray(response?.data)) {
-        return response.data;
+    if (
+      Array.isArray(
+        response?.data
+      )
+    ) {
+      return response.data;
     }
 
     return [];
+  } catch (error) {
+    console.error(
+      "Get recently viewed products failed:",
+      error
+    );
+
+    throw error;
+  }
 }
 
-/* ============================================================
-   INVALIDATE PUBLIC PRODUCT CACHE
-============================================================ */
+/* ==========================================================
+   CACHE INVALIDATION
+========================================================== */
 
 export function invalidateProductCache() {
-    invalidatePublicCache("products:");
+  invalidatePublicCache(
+    "products:"
+  );
 }

@@ -65,6 +65,99 @@ async function request(
 
 
     // --------------------------------------------------------
+    // EXTRACT QUERY PARAMETERS
+    // --------------------------------------------------------
+
+    const {
+        params,
+        ...fetchOptions
+    } = options;
+
+
+    // --------------------------------------------------------
+    // BUILD API URL
+    // --------------------------------------------------------
+
+    let url =
+        `${API_BASE_URL}${endpoint}`;
+
+
+    if (
+        params &&
+        typeof params === "object"
+    ) {
+
+        const searchParams =
+            new URLSearchParams();
+
+
+        Object.entries(params).forEach(
+            ([key, value]) => {
+
+                // Ignore empty values
+                if (
+                    value !== undefined &&
+                    value !== null &&
+                    value !== ""
+                ) {
+
+                    // Support arrays
+                    if (
+                        Array.isArray(value)
+                    ) {
+
+                        value.forEach(
+                            (item) => {
+
+                                if (
+                                    item !==
+                                    undefined &&
+                                    item !==
+                                    null &&
+                                    item !== ""
+                                ) {
+
+                                    searchParams.append(
+                                        key,
+                                        String(item)
+                                    );
+
+                                }
+
+                            }
+                        );
+
+                    }
+                    else {
+
+                        searchParams.append(
+                            key,
+                            String(value)
+                        );
+
+                    }
+
+                }
+
+            }
+        );
+
+
+        const queryString =
+            searchParams.toString();
+
+
+        if (queryString) {
+
+            url +=
+                `?${queryString}`;
+
+        }
+
+    }
+
+
+    // --------------------------------------------------------
     // HEADERS
     // --------------------------------------------------------
 
@@ -73,7 +166,7 @@ async function request(
         "Content-Type":
             "application/json",
 
-        ...options.headers,
+        ...fetchOptions.headers,
 
     };
 
@@ -97,11 +190,11 @@ async function request(
     const response =
         await fetch(
 
-            `${API_BASE_URL}${endpoint}`,
+            url,
 
             {
 
-                ...options,
+                ...fetchOptions,
 
                 headers,
 
@@ -234,7 +327,7 @@ const api = {
 
     post: (
         endpoint,
-        data,
+        data = {},
         options = {}
     ) =>
 
@@ -264,7 +357,7 @@ const api = {
 
     put: (
         endpoint,
-        data,
+        data = {},
         options = {}
     ) =>
 
@@ -294,7 +387,7 @@ const api = {
 
     patch: (
         endpoint,
-        data,
+        data = {},
         options = {}
     ) =>
 

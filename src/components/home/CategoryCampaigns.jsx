@@ -142,8 +142,8 @@ export default function CategoryCampaigns({ section }) {
       const item = cmsItems[index] || null;
 
       const sources = [
-        campaign.image,
         item?.image_url,
+        campaign.image,
         campaign.fallbackImage,
       ].filter(
         (source, sourceIndex, array) =>
@@ -162,11 +162,16 @@ export default function CategoryCampaigns({ section }) {
         sources,
         destination: safeInternalRoute(
           item?.primary_cta_url || item?.target_url,
-          campaign.destination
+          item?.target_type === "category" &&
+            item?.target_id
+            ? `/products?category=${encodeURIComponent(
+                item.target_id
+              )}`
+            : campaign.destination
         ),
       };
     });
-  }, [section?.items]);
+  }, [section]);
 
   return (
     <section

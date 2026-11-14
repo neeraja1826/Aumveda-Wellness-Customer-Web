@@ -18,13 +18,18 @@ import {
   Plus,
   Save,
   ShoppingBag,
+  Settings,
   Star,
   Trash2,
   UserRound,
   X
 } from "lucide-react";
 
-import { Link, useNavigate } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate
+} from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext";
@@ -42,6 +47,8 @@ import {
   setDefaultAddress,
   updateCustomerAddress
 } from "../services/addressService";
+
+import { getCurrentLocation } from "../services/locationService";
 
 import "../styles/profile.css";
 
@@ -251,6 +258,7 @@ function AddressField({
 function AddressCard({
   address,
   busy,
+  onSelect,
   onDefault,
   onEdit,
   onDelete
@@ -316,6 +324,18 @@ function AddressCard({
       </div>
 
       <div className="profile-address-card__actions">
+        {onSelect && (
+          <button
+            type="button"
+            className="profile-address-default-button"
+            onClick={() => onSelect(address)}
+            disabled={busy}
+          >
+            <Check size={12} />
+            Use for Checkout
+          </button>
+        )}
+
         {!address.is_default && (
           <button
             type="button"
@@ -358,6 +378,9 @@ function AddressCard({
 
 function Profile() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnToCheckout =
+    location.state?.returnToCheckout === true;
 
   const {
     user,
@@ -410,6 +433,10 @@ function Profile() {
   const [addressError, setAddressError] =
     useState("");
   const [addressSuccess, setAddressSuccess] =
+    useState("");
+  const [detectingLocation, setDetectingLocation] =
+    useState(false);
+  const [detectedLocation, setDetectedLocation] =
     useState("");
 
   /* ========================================================
@@ -687,8 +714,39 @@ function Profile() {
     return normalized;
   }
 
+  function navigateToCheckout(addressId) {
+    if (!returnToCheckout || !addressId) return;
+
+    const searchParams = new URLSearchParams(
+      location.state?.checkoutSearch || ""
+    );
+    searchParams.set("addressId", String(addressId));
+
+    const search = searchParams.toString();
+
+    navigate(
+      {
+        pathname: "/checkout",
+        search: search ? `?${search}` : ""
+      },
+      { replace: true }
+    );
+  }
+
+  function handleSelectAddress(address) {
+    if (!address?.id) {
+      setAddressError(
+        "This address could not be selected."
+      );
+      return;
+    }
+
+    navigateToCheckout(address.id);
+  }
+
   function handleAddAddress() {
     setEditingAddressId(null);
+    setDetectedLocation("");
 
     setAddressForm({
       ...EMPTY_ADDRESS_FORM,
@@ -705,6 +763,7 @@ function Profile() {
 
   function handleEditAddress(address) {
     setEditingAddressId(address.id);
+    setDetectedLocation("");
     setAddressForm(addressToForm(address));
     setAddressError("");
     setAddressSuccess("");
@@ -734,12 +793,51 @@ function Profile() {
     }));
   }
 
+  async function handleGetCurrentLocation() {
+    setDetectingLocation(true);
+    setAddressError("");
+    setDetectedLocation("");
+
+    try {
+      const location = await getCurrentLocation();
+      const locationPostalCode = String(
+        location.postalCode || ""
+      ).replace(/\D/g, "");
+
+      setAddressForm((current) => ({
+        ...current,
+        addressLine1:
+          location.addressLine1 ||
+          location.address ||
+          current.addressLine1,
+        addressLine2:
+          location.addressLine2 || current.addressLine2,
+        city: location.city || current.city,
+        state: location.state || current.state,
+        postalCode:
+          locationPostalCode.length === 6
+            ? locationPostalCode
+            : current.postalCode,
+        country: location.country || current.country,
+      }));
+      setDetectedLocation(location.address);
+    } catch (error) {
+      setAddressError(
+        error?.message ||
+          "Unable to get your current location. Please try again."
+      );
+    } finally {
+      setDetectingLocation(false);
+    }
+  }
+
   function handleCloseAddressForm() {
     if (addressSaving) return;
 
     setAddressFormOpen(false);
     setEditingAddressId(null);
     setAddressError("");
+    setDetectedLocation("");
   }
 
   /* ========================================================
@@ -828,16 +926,51 @@ function Profile() {
             : addressForm.isDefault
       };
 
-      if (isEditing) {
-        await updateCustomerAddress({
+      const savedAddress = isEditing
+        ? await updateCustomerAddress({
           addressId: editingAddressId,
           ...payload
-        });
-      } else {
-        await createCustomerAddress(payload);
-      }
+        })
+        : await createCustomerAddress(payload);
 
-      await refreshAddresses();
+      const refreshedAddresses =
+        await refreshAddresses();
+
+      if (returnToCheckout) {
+        const savedAddressId =
+          savedAddress?.id ??
+          savedAddress?.address?.id ??
+          savedAddress?.data?.id ??
+          savedAddress?.data?.address?.id ??
+          editingAddressId;
+
+        const addressToReturn =
+          refreshedAddresses.find(
+            address =>
+              savedAddressId &&
+              String(address.id) ===
+                String(savedAddressId)
+          ) ||
+          refreshedAddresses.find(
+            address =>
+              String(address?.phone || "").replace(/\D/g, "") ===
+                payload.phone.replace(/\D/g, "") &&
+              String(address?.address_line1 || "").trim() ===
+                payload.addressLine1
+          );
+
+        if (!addressToReturn?.id) {
+          setAddressFormOpen(false);
+          setEditingAddressId(null);
+          setAddressError(
+            "Address saved, but it could not be selected. Choose it from your saved addresses to return to checkout."
+          );
+          return;
+        }
+
+        navigateToCheckout(addressToReturn.id);
+        return;
+      }
 
       setAddressFormOpen(false);
       setEditingAddressId(null);
@@ -1224,6 +1357,22 @@ function Profile() {
 
                 <ArrowRight size={14} />
               </Link>
+
+              <Link
+                to="/account/settings"
+                className="profile-quick-link"
+              >
+                <span className="profile-quick-link__icon">
+                  <Settings size={16} />
+                </span>
+
+                <span className="profile-quick-link__content">
+                  <strong>Settings</strong>
+                  <small>Manage account preferences</small>
+                </span>
+
+                <ArrowRight size={14} />
+              </Link>
             </nav>
 
             {/* LOGOUT */}
@@ -1571,6 +1720,11 @@ function Profile() {
                         addressActionId !== null ||
                         addressSaving
                       }
+                      onSelect={
+                        returnToCheckout
+                          ? handleSelectAddress
+                          : undefined
+                      }
                       onDefault={handleSetDefault}
                       onEdit={handleEditAddress}
                       onDelete={handleDeleteAddress}
@@ -1865,28 +2019,52 @@ function Profile() {
               )}
 
               <div className="profile-address-form__actions">
-                <button
-                  type="button"
-                  className="profile-address-form__cancel"
-                  onClick={handleCloseAddressForm}
-                  disabled={addressSaving}
-                >
-                  Cancel
-                </button>
+                <div className="profile-address-form__location">
+                  <button
+                    type="button"
+                    className="profile-address-form__current-location"
+                    onClick={handleGetCurrentLocation}
+                    disabled={addressSaving || detectingLocation}
+                  >
+                    <MapPin size={15} />
+                    {detectingLocation
+                      ? "Getting Location..."
+                      : "Get Current Location"}
+                  </button>
+                  <span>
+                    Location is shared with OpenStreetMap to look up the address.
+                  </span>
+                  {detectedLocation && (
+                    <span role="status">
+                      Location detected: {detectedLocation}
+                    </span>
+                  )}
+                </div>
 
-                <button
-                  type="submit"
-                  className="profile-address-form__save"
-                  disabled={addressSaving}
-                >
-                  <Save size={14} />
+                <div className="profile-address-form__submit-actions">
+                  <button
+                    type="button"
+                    className="profile-address-form__cancel"
+                    onClick={handleCloseAddressForm}
+                    disabled={addressSaving || detectingLocation}
+                  >
+                    Cancel
+                  </button>
 
-                  {addressSaving
-                    ? "Saving..."
-                    : editingAddressId !== null
-                      ? "Update Address"
-                      : "Save Address"}
-                </button>
+                  <button
+                    type="submit"
+                    className="profile-address-form__save"
+                    disabled={addressSaving || detectingLocation}
+                  >
+                    <Save size={14} />
+
+                    {addressSaving
+                      ? "Saving..."
+                      : editingAddressId !== null
+                        ? "Update Address"
+                        : "Save Address"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

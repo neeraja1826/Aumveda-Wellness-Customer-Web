@@ -1,5 +1,6 @@
 
 import {
+  cloneElement,
   useEffect,
   useMemo,
   useState,
@@ -155,7 +156,8 @@ export default function HomePage() {
   const explore = findSection(
     sections,
     "explore_categories",
-    "explore_wellness"
+    "explore_wellness",
+    "explore_ayurveda"
   );
 
   const shopByNeed = findSection(
@@ -184,7 +186,8 @@ export default function HomePage() {
   const mainPromo = findSection(
     sections,
     "main_promo",
-    "main_promo_hero"
+    "main_promo_hero",
+    "daily_wellness_essentials"
   );
 
   const featured = findSection(
@@ -214,6 +217,145 @@ export default function HomePage() {
     "more_discovery"
   );
 
+  const homeSections = [
+    {
+      key: "hero_banner",
+      section: hero,
+      defaultOrder: 1,
+      content: (
+        <div className="rv-slot-hero_banner">
+          <HeroSection />
+        </div>
+      ),
+    },
+    {
+      key: "explore_categories",
+      section: explore,
+      defaultOrder: 2,
+      content: (
+        <div className="rv-slot-explore_categories">
+          <ExploreWellness section={explore} />
+        </div>
+      ),
+    },
+    {
+      key: "shop_by_need",
+      section: shopByNeed,
+      defaultOrder: 3,
+      content: (
+        <div className="rv-slot-shop_by_need">
+          <ShopByNeed section={shopByNeed} />
+        </div>
+      ),
+    },
+    {
+      key: "best_deals",
+      section: bestDeals,
+      defaultOrder: 4,
+      content: (
+        <div className="rv-slot-best_deals">
+          <BestDealsSection section={bestDeals} />
+        </div>
+      ),
+    },
+    {
+      key: "available_coupons",
+      section: couponsSection,
+      defaultOrder: 5,
+      content: (
+        <div className="rv-slot-available_coupons">
+          <AvailableCoupons />
+        </div>
+      ),
+    },
+    {
+      key: "continue_shopping",
+      section: continueShoppingSection,
+      defaultOrder: 6,
+      content: (
+        <div className="rv-slot-continue_shopping">
+          <ContinueShopping />
+        </div>
+      ),
+    },
+    {
+      key: "main_promo",
+      section: mainPromo,
+      defaultOrder: 7,
+      content: (
+        <div className="rv-slot-main_promo">
+          <MainPromoHero />
+        </div>
+      ),
+    },
+    {
+      key: "featured_products",
+      section: featured,
+      defaultOrder: 8,
+      content: (
+        <div className="rv-slot-featured_products">
+          <FeaturedProducts section={featured} />
+        </div>
+      ),
+    },
+    {
+      key: "category_campaigns",
+      section: campaigns,
+      defaultOrder: 9,
+      content: (
+        <div className="rv-slot-category_campaigns">
+          <CategoryCampaigns section={campaigns} />
+        </div>
+      ),
+    },
+    {
+      key: "category_product_showcase",
+      section: categoryShowcase,
+      defaultOrder: 10,
+      content: (
+        <div className="rv-slot-category_product_showcase">
+          <CategoryProductShowcase section={categoryShowcase} />
+        </div>
+      ),
+    },
+    {
+      key: "trust_benefits",
+      section: trust,
+      defaultOrder: 11,
+      content: (
+        <div className="rv-slot-trust_benefits">
+          <TrustBenefits />
+        </div>
+      ),
+    },
+    {
+      key: "more_discovery",
+      section: discovery,
+      defaultOrder: 12,
+      content: (
+        <div className="rv-slot-more_discovery">
+          <MoreDiscovery section={discovery} />
+        </div>
+      ),
+    },
+  ]
+    .filter(({ section }) => isVisible(section))
+    .sort((left, right) => {
+      const leftOrder =
+        left.section &&
+        Number.isFinite(Number(left.section.sort_order))
+          ? Number(left.section.sort_order)
+          : left.defaultOrder;
+      const rightOrder =
+        right.section &&
+        Number.isFinite(Number(right.section.sort_order))
+          ? Number(right.section.sort_order)
+          : right.defaultOrder;
+
+      return leftOrder - rightOrder ||
+        left.defaultOrder - right.defaultOrder;
+    });
+
   /* ==========================================================
      RENDER
   ========================================================== */
@@ -221,116 +363,9 @@ export default function HomePage() {
   return (
     <div className="aumveda-home-page">
       <div className="aumveda-home-page__container">
-
-        {/* 01 — HERO BANNER */}
-
-        {isVisible(hero) && (
-          <div className="rv-slot-hero_banner">
-            <HeroSection
-              banners={
-                Array.isArray(hero?.items) &&
-                hero.items.length > 0
-                  ? hero.items
-                  : undefined
-              }
-            />
-          </div>
-        )}
-
-        {/* 02 — EXPLORE CATEGORIES */}
-
-        {isVisible(explore) && (
-          <div className="rv-slot-explore_categories">
-            <ExploreWellness />
-          </div>
-        )}
-
-        {/* 03 — SHOP BY NEED */}
-
-        {isVisible(shopByNeed) && (
-          <div className="rv-slot-shop_by_need">
-            <ShopByNeed section={shopByNeed} />
-          </div>
-        )}
-
-        {/* 04 — BEST DEALS */}
-
-        {isVisible(bestDeals) && (
-          <div className="rv-slot-best_deals">
-            <BestDealsSection section={bestDeals} />
-          </div>
-        )}
-
-        {/* 05 — AVAILABLE COUPONS */}
-
-        {isVisible(couponsSection) && (
-          <div className="rv-slot-available_coupons">
-            <AvailableCoupons />
-          </div>
-        )}
-
-        {/* 06 — CONTINUE YOUR WELLNESS JOURNEY */}
-
-        {isVisible(continueShoppingSection) && (
-          <div className="rv-slot-continue_shopping">
-            <ContinueShopping />
-          </div>
-        )}
-
-        {/* 07 — DAILY WELLNESS ESSENTIALS */}
-
-        {isVisible(mainPromo) && (
-          <div className="rv-slot-main_promo">
-            <MainPromoHero />
-          </div>
-        )}
-
-        {/* 08 — FEATURED PRODUCTS */}
-
-        {isVisible(featured) && (
-          <div className="rv-slot-featured_products">
-            <FeaturedProducts
-              section={featured}
-            />
-          </div>
-        )}
-
-        {/* 09 — CATEGORY CAMPAIGNS */}
-
-        {isVisible(campaigns) && (
-          <div className="rv-slot-category_campaigns">
-            <CategoryCampaigns
-              section={campaigns}
-            />
-          </div>
-        )}
-
-        {/* 10 — CATEGORY PRODUCT SHOWCASE */}
-
-        {isVisible(categoryShowcase) && (
-          <div className="rv-slot-category_product_showcase">
-            <CategoryProductShowcase
-              section={categoryShowcase}
-            />
-          </div>
-        )}
-
-        {/* 11 — TRUST & BENEFITS */}
-
-        {isVisible(trust) && (
-          <div className="rv-slot-trust_benefits">
-            <TrustBenefits />
-          </div>
-        )}
-
-        {/* 12 — MORE DISCOVERY */}
-
-        {isVisible(discovery) && (
-          <div className="rv-slot-more_discovery">
-            <MoreDiscovery />
-          </div>
-        )}
-
+        {homeSections.map(({ key, content }) => (
+          cloneElement(content, { key })
+        ))}
       </div>
 
       {configurationError && null}

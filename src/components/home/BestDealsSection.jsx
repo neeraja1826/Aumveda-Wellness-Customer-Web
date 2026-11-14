@@ -1350,7 +1350,7 @@ export default function BestDealsSection({ section }) {
           </div>
 
           <Link
-            to="/products"
+            to="/deals"
             className="best-deals__view-all"
           >
             View All

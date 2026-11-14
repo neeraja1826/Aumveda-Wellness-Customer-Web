@@ -1001,9 +1001,7 @@ function LoginPage() {
                                                 type="button"
                                                 className="auth-forgot"
                                                 onClick={() =>
-                                                    setError(
-                                                        "Password recovery will be connected in the next authentication step."
-                                                    )
+                                                    navigate("/forgot-password")
                                                 }
                                             >
                                                 Forgot password?

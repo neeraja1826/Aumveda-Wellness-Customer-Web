@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -8,18 +8,19 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { getMainPromoBanners } from "../../services/homeService";
+
 import "../../styles/main-promo-hero.css";
 
 /* ============================================================
    AUMVEDA — DAILY WELLNESS ESSENTIALS
 
    - Premium compact promotional banner
-   - Supabase Storage photography
+   - Admin-managed promotional copy and imagery
    - Text and CTA on the left
    - Product photography on the right
    - Responsive desktop and mobile
    - Graceful image failure fallback
-   - No additional backend requests
 ============================================================ */
 
 const SUPABASE_URL = (
@@ -37,8 +38,89 @@ const BANNER_URL =
   `${encodeURIComponent(STORAGE_FOLDER)}/` +
   encodeURIComponent(BANNER_FILENAME);
 
+function getBannerList(response) {
+  const candidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.items,
+    response?.items,
+  ];
+
+  return candidates.find(Array.isArray) || [];
+}
+
+function safeInternalRoute(value, fallback) {
+  if (
+    typeof value === "string" &&
+    value.startsWith("/") &&
+    !value.startsWith("//") &&
+    !value.includes("\\")
+  ) {
+    return value;
+  }
+
+  return fallback;
+}
+
 export default function MainPromoHero() {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [banner, setBanner] = useState(null);
+  const [failedImages, setFailedImages] = useState({
+    bannerId: null,
+    sources: [],
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    getMainPromoBanners()
+      .then((response) => {
+        if (active) {
+          setBanner(getBannerList(response)[0] || null);
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "Daily Wellness banner request failed:",
+          error
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const metadata = banner?.metadata || {};
+  const customCopy = metadata.custom_copy === true;
+  const title = customCopy
+    ? banner?.title || "Daily Wellness"
+    : "Daily Wellness";
+  const titleLine2 = customCopy
+    ? metadata.heading_line2 || ""
+    : "Essentials";
+  const subtitle = customCopy
+    ? banner?.subtitle || ""
+    : "Natural solutions for a better tomorrow.";
+  const eyebrow = customCopy
+    ? metadata.eyebrow || ""
+    : "THE AUMVEDA COLLECTION";
+  const ctaText = customCopy
+    ? metadata.primary_cta_text || "Shop Now"
+    : "Shop Now";
+  const imageSources = [
+    banner?.image_url,
+    BANNER_URL,
+  ].filter(
+    (source, index, sources) =>
+      typeof source === "string" &&
+      source.trim() &&
+      sources.indexOf(source) === index &&
+      !(
+        failedImages.bannerId === banner?.id &&
+        failedImages.sources.includes(source)
+      )
+  );
+  const activeImage = imageSources[0];
 
   return (
     <section
@@ -50,19 +132,30 @@ export default function MainPromoHero() {
 
           {/* SUPABASE PROMOTIONAL IMAGE */}
 
-          {!imageFailed && (
+          {activeImage && (
             <img
               className="main-promo-hero__image"
-              src={BANNER_URL}
+              src={activeImage}
               alt=""
               loading="lazy"
               decoding="async"
               draggable={false}
               onError={() => {
-                setImageFailed(true);
+                setFailedImages((previous) => {
+                  const sources =
+                    previous.bannerId === banner?.id
+                      ? previous.sources
+                      : [];
+                  return sources.includes(activeImage)
+                    ? previous
+                    : {
+                        bannerId: banner?.id,
+                        sources: [...sources, activeImage],
+                      };
+                });
                 console.error(
                   "Daily Wellness banner failed:",
-                  BANNER_URL
+                  activeImage
                 );
               }}
             />
@@ -84,23 +177,26 @@ export default function MainPromoHero() {
                 size={13}
                 aria-hidden="true"
               />
-              THE AUMVEDA COLLECTION
+              {eyebrow}
             </span>
 
             <h2 id="daily-wellness-title">
-              Daily Wellness
-              <span>Essentials</span>
+              {title}
+              {titleLine2 && <span>{titleLine2}</span>}
             </h2>
 
             <p className="main-promo-hero__subtitle">
-              Natural solutions for a better tomorrow.
+              {subtitle}
             </p>
 
             <Link
-              to="/products"
+              to={safeInternalRoute(
+                banner?.target_url,
+                "/products"
+              )}
               className="main-promo-hero__shop"
             >
-              Shop Now
+              {ctaText}
               <ArrowRight
                 size={16}
                 aria-hidden="true"
@@ -113,7 +209,9 @@ export default function MainPromoHero() {
                   size={14}
                   aria-hidden="true"
                 />
-                Natural Ingredients
+                {customCopy
+                  ? metadata.benefit_one || ""
+                  : "Natural Ingredients"}
               </span>
 
               <span>
@@ -121,7 +219,9 @@ export default function MainPromoHero() {
                   size={14}
                   aria-hidden="true"
                 />
-                Quality Assured
+                {customCopy
+                  ? metadata.benefit_two || ""
+                  : "Quality Assured"}
               </span>
             </div>
 

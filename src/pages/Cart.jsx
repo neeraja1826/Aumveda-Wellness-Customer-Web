@@ -1,6 +1,7 @@
 import {
     ArrowLeft,
     ArrowRight,
+    Heart,
     Minus,
     PackageCheck,
     Plus,
@@ -15,16 +16,16 @@ import {
 } from "react-router-dom";
 
 import {
-    useEffect
+    useState
 } from "react";
-
-import {
-    useAuth
-} from "../context/AuthContext";
 
 import {
     useCart
 } from "../context/CartContext";
+
+import {
+    useWishlist
+} from "../context/WishlistContext";
 
 import "../styles/cart.css";
 
@@ -65,17 +66,6 @@ function Cart() {
 
 
     /* ========================================================
-       AUTH
-    ======================================================== */
-
-    const {
-        isAuthenticated,
-        loading: authLoading
-    } =
-        useAuth();
-
-
-    /* ========================================================
        CART CONTEXT
     ======================================================== */
 
@@ -91,38 +81,16 @@ function Cart() {
     } =
         useCart();
 
+    const {
+        addToWishlist
+    } =
+        useWishlist();
 
-    /* ========================================================
-       PROTECT CART
-    ======================================================== */
-
-    useEffect(() => {
-
-        if (
-            !authLoading &&
-            !isAuthenticated
-        ) {
-
-            navigate(
-                "/login",
-                {
-                    replace: true,
-                    state: {
-                        from: {
-                            pathname:
-                                "/cart"
-                        }
-                    }
-                }
-            );
-
-        }
-
-    }, [
-        authLoading,
-        isAuthenticated,
-        navigate
-    ]);
+    const [
+        wishlistActionError,
+        setWishlistActionError
+    ] =
+        useState("");
 
 
     /* ========================================================
@@ -214,6 +182,31 @@ function Cart() {
 
         }
 
+        async function handleMoveToWishlist(item) {
+            const productId = item?.product?.id;
+
+            if (!item?.id || !productId) {
+                setWishlistActionError(
+                    "Unable to move this product to your wishlist."
+                );
+                return;
+            }
+
+            try {
+                setWishlistActionError("");
+                addToWishlist(productId);
+                await removeFromCart(item.id);
+            } catch (moveError) {
+                console.error(
+                    "Move cart item to wishlist failed:",
+                    moveError
+                );
+                setWishlistActionError(
+                    "Unable to move this product to your wishlist. Please try again."
+                );
+            }
+        }
+
     }
 
 
@@ -283,42 +276,6 @@ function Cart() {
     /* ========================================================
        AUTH LOADING
     ======================================================== */
-
-    if (authLoading) {
-
-        return (
-
-            <main
-                className="aumveda-cart-page"
-            >
-
-                <div
-                    className="aumveda-cart-loading"
-                >
-
-                    <div
-                        className="aumveda-cart-loading__spinner"
-                    />
-
-                    <p>
-                        Preparing your cart...
-                    </p>
-
-                </div>
-
-            </main>
-
-        );
-
-    }
-
-
-    if (!isAuthenticated) {
-
-        return null;
-
-    }
-
 
     /* ========================================================
        CART LOADING
@@ -529,6 +486,23 @@ function Cart() {
                 )
             }
 
+            {
+                wishlistActionError && (
+
+                    <div
+                        className="aumveda-cart-error"
+                        role="alert"
+                    >
+
+                        {
+                            wishlistActionError
+                        }
+
+                    </div>
+
+                )
+            }
+
 
             {/* =================================================
                 MAIN LAYOUT
@@ -644,15 +618,6 @@ function Cart() {
                                         Number(
                                             variant.stock_quantity ||
                                             0
-                                        );
-
-
-                                    const lineTotal =
-                                        Number(
-                                            item.line_total ??
-                                            item.subtotal ??
-                                            price *
-                                            quantity
                                         );
 
 
@@ -938,22 +903,31 @@ function Cart() {
                                                 className="aumveda-cart-item__total"
                                             >
 
-                                                <span>
-                                                    Total
-                                                </span>
-
-
-                                                <strong>
-
-                                                    ₹
-                                                    {
-                                                        formatPrice(
-                                                            lineTotal
+                                                <button
+                                                    type="button"
+                                                    className="aumveda-cart-item__remove"
+                                                    aria-label={
+                                                        `Move ${
+                                                            product.name ||
+                                                            "product"
+                                                        } to wishlist`
+                                                    }
+                                                    title="Move to Wishlist"
+                                                    onClick={() =>
+                                                        handleMoveToWishlist(
+                                                            item
                                                         )
                                                     }
+                                                    disabled={
+                                                        loading
+                                                    }
+                                                >
 
-                                                </strong>
+                                                    <Heart
+                                                        size={15}
+                                                    />
 
+                                                </button>
 
                                                 <button
                                                     type="button"

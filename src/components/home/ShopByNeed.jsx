@@ -302,8 +302,8 @@ function resolveDestination(need, categories) {
    08 — IMAGE COMPONENT
 
    Image source priority:
-   1. Supabase Storage image
-   2. CMS image
+   1. Section-specific CMS image
+   2. Supabase Storage image
    3. Existing local image
    4. Category image
 
@@ -418,7 +418,7 @@ export default function ShopByNeed({
   /* ==========================================================
      12 — PREPARE FOUR SHOPPING CARDS
 
-     Supabase Storage artwork is always preferred.
+     Section-specific CMS artwork is preferred when configured.
 
      CMS can still override:
      - Title
@@ -445,14 +445,22 @@ export default function ShopByNeed({
         const cmsItem =
           cmsItems[index] || null;
 
-        const category = findCategory(
-          need,
-          categories
-        );
+        const selectedCategory =
+          cmsItem?.target_type === "category" &&
+          cmsItem?.target_id
+            ? categories.find(
+                (entry) =>
+                  String(entry.id) ===
+                  String(cmsItem.target_id)
+              )
+            : null;
+        const category =
+          selectedCategory ||
+          findCategory(need, categories);
 
         const sources = [
-          need.image,
           cmsItem?.image_url,
+          need.image,
           need.fallbackImage,
           category?.image_url,
         ].filter(
@@ -471,6 +479,7 @@ export default function ShopByNeed({
           sources,
 
           title:
+            selectedCategory?.name ||
             cmsItem?.title ||
             need.title,
 
@@ -481,7 +490,7 @@ export default function ShopByNeed({
         };
       }
     );
-  }, [categories, section?.items]);
+  }, [categories, section]);
 
   /* ==========================================================
      13 — RENDER SECTION

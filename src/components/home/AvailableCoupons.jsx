@@ -14,6 +14,7 @@ import {
   RefreshCw,
   TicketPercent,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import {
   getHomeCoupons,
@@ -239,7 +240,9 @@ async function copyCouponCode(code) {
    MAIN COMPONENT
 ============================================================ */
 
-export default function AvailableCoupons() {
+export default function AvailableCoupons({
+  showAllLink = true,
+} = {}) {
   const [coupons, setCoupons] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -589,6 +592,11 @@ export default function AvailableCoupons() {
             ? "OFFER"
             : "OFFERS"}
         </span>
+        {showAllLink && (
+          <Link className="aum-coupons__view-all" to="/coupons">
+            View All
+          </Link>
+        )}
       </div>
 
       {/* COUPON CARDS */}
