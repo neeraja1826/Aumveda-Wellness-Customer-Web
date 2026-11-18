@@ -7,7 +7,9 @@ import {
   Headphones,
   MapPin,
   Package,
+  RefreshCw,
   RotateCcw,
+  Star,
   Truck,
   XCircle
 } from "lucide-react";
@@ -15,11 +17,21 @@ import { Link, useParams } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 import { getCustomerOrderDetails } from "../services/orderService";
+import {
+  getCustomerOrderReviews,
+  submitProductReview,
+} from "../services/reviewService";
 import { OrderManagementActions } from "./Orders";
 
 import "../styles/orders.css";
 
-const TRACKING_STEPS = ["Placed", "Processing", "Shipped", "Delivered"];
+const TRACKING_STEPS = [
+  "Placed",
+  "Processing",
+  "Shipped",
+  "Out for Delivery",
+  "Delivered"
+];
 
 function formatMoney(value, currency = "INR") {
   const amount = Number(value ?? 0);
@@ -76,12 +88,9 @@ function getStatusTone(value) {
 
 function getTrackingProgress(status) {
   const value = normalizeStatus(status);
-  if (["delivered", "completed"].includes(value)) return 3;
-  if (
-    ["shipped", "partially_shipped", "out_for_delivery"].includes(value)
-  ) {
-    return 2;
-  }
+  if (["delivered", "completed"].includes(value)) return 4;
+  if (value === "out_for_delivery") return 3;
+  if (["shipped", "partially_shipped"].includes(value)) return 2;
   if (["confirmed", "processing", "packed"].includes(value)) return 1;
   return 0;
 }
@@ -138,7 +147,11 @@ function OrderTracking({ status }) {
             key={step}
           >
             <span className="order-tracking__node">
-              {index <= activeStep ? <Check size={14} /> : index === 2 ? <Truck size={14} /> : null}
+              {index <= activeStep ? (
+                <Check size={14} />
+              ) : index === 2 || index === 3 ? (
+                <Truck size={14} />
+              ) : null}
             </span>
             <span>{step}</span>
           </div>
@@ -176,7 +189,15 @@ function AddressLines({ address }) {
   );
 }
 
-function OrderProduct({ item, currency }) {
+function OrderProduct({ item, currency, canReview, review }) {
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewTitle, setReviewTitle] = useState("");
+  const [reviewText, setReviewText] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [submittedReview, setSubmittedReview] = useState(null);
+  const [reviewError, setReviewError] = useState("");
+  const productId = item.product_id ?? item.product?.id;
   const images = item.product?.product_images || [];
   const productSlug =
     item.product?.slug || item.product_slug || item.slug;
@@ -195,36 +216,176 @@ function OrderProduct({ item, currency }) {
       : item.total_price;
   const productName =
     item.product_name || item.product?.name || "Ayurvedic Botanical";
+  const displayedReview = submittedReview || review;
+
+  async function handleSubmitReview(event) {
+    event.preventDefault();
+
+    try {
+      setReviewSubmitting(true);
+      setReviewError("");
+      const result = await submitProductReview({
+        productId,
+        orderItemId: item.id,
+        rating: reviewRating,
+        title: reviewTitle,
+        reviewText,
+      });
+      if (!result?.data) {
+        throw new Error("The server did not return the saved review.");
+      }
+      setSubmittedReview(result.data);
+      setReviewOpen(false);
+    } catch (submitError) {
+      console.error("Order review submission failed:", submitError);
+      setReviewError(
+        submitError?.message || "Unable to submit your review."
+      );
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }
 
   return (
-    <div className="order-detail__product">
-      <div className="order-detail__product-image">
-        {image ? (
-          productPath ? (
-            <Link to={productPath} aria-label={`View ${productName}`} className="order-detail__product-link">
+    <div className="order-detail__product-entry">
+      <div className="order-detail__product">
+        <div className="order-detail__product-image">
+          {image ? (
+            productPath ? (
+              <Link to={productPath} aria-label={`View ${productName}`} className="order-detail__product-link">
+                <img src={image} alt="" />
+              </Link>
+            ) : (
               <img src={image} alt="" />
+            )
+          ) : (
+            <Package size={23} />
+          )}
+        </div>
+        <div className="order-detail__product-info">
+          {productPath ? (
+            <Link className="order-detail__product-name" to={productPath}>
+              {productName}
             </Link>
           ) : (
-            <img src={image} alt="" />
-          )
-        ) : (
-          <Package size={23} />
-        )}
+            <strong>{productName}</strong>
+          )}
+          {item.variant_name && <span>{item.variant_name}</span>}
+          <span>Qty: {quantity}</span>
+        </div>
+        <strong className="order-detail__product-price">
+          {formatMoney(lineTotal, currency)}
+        </strong>
       </div>
-      <div className="order-detail__product-info">
-        {productPath ? (
-          <Link className="order-detail__product-name" to={productPath}>
-            {productName}
-          </Link>
-        ) : (
-          <strong>{productName}</strong>
-        )}
-        {item.variant_name && <span>{item.variant_name}</span>}
-        <span>Qty: {quantity}</span>
-      </div>
-      <strong className="order-detail__product-price">
-        {formatMoney(lineTotal, currency)}
-      </strong>
+
+      {(displayedReview || (canReview && item.id && productId)) && (
+        <div className="order-detail__review">
+          {displayedReview ? (
+            <article className="order-detail__review-card">
+              <div
+                className="order-detail__review-stars"
+                role="img"
+                aria-label={`${displayedReview.rating} out of 5 stars`}
+              >
+                {[1, 2, 3, 4, 5].map(star => (
+                  <Star
+                    key={star}
+                    size={15}
+                    fill={star <= Number(displayedReview.rating) ? "currentColor" : "none"}
+                    aria-hidden="true"
+                  />
+                ))}
+              </div>
+              <strong>Your review</strong>
+              {displayedReview.title && <h3>{displayedReview.title}</h3>}
+              {displayedReview.review_text && <p>{displayedReview.review_text}</p>}
+              {displayedReview.created_at && (
+                <time dateTime={displayedReview.created_at}>
+                  {new Date(displayedReview.created_at).toLocaleDateString("en-IN")}
+                </time>
+              )}
+            </article>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="order-detail__review-toggle"
+                onClick={() => {
+                  setReviewOpen(value => !value);
+                  setReviewError("");
+                }}
+                aria-expanded={reviewOpen}
+                disabled={reviewSubmitting}
+              >
+                <Star size={15} />
+                {reviewOpen ? "Cancel review" : "Write a review"}
+              </button>
+
+              {reviewOpen && (
+                <form
+                  className="order-detail__review-form"
+                  onSubmit={handleSubmitReview}
+                >
+                  <div
+                    className="order-detail__review-stars"
+                    role="group"
+                    aria-label="Your rating"
+                  >
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <button
+                        key={star}
+                        type="button"
+                        aria-label={`${star} star${star === 1 ? "" : "s"}`}
+                        aria-pressed={reviewRating === star}
+                        onClick={() => setReviewRating(star)}
+                        disabled={reviewSubmitting}
+                      >
+                        <Star
+                          size={20}
+                          fill={star <= reviewRating ? "currentColor" : "none"}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <label>
+                    Title (optional)
+                    <input
+                      value={reviewTitle}
+                      onChange={event => setReviewTitle(event.target.value)}
+                      maxLength={150}
+                      placeholder="Summarize your experience"
+                      disabled={reviewSubmitting}
+                    />
+                  </label>
+                  <label>
+                    Your review
+                    <textarea
+                      value={reviewText}
+                      onChange={event => setReviewText(event.target.value)}
+                      maxLength={3000}
+                      rows={3}
+                      placeholder="Share your experience with this product"
+                      disabled={reviewSubmitting}
+                    />
+                  </label>
+                  {reviewError && (
+                    <p className="order-detail__review-error" role="alert">
+                      {reviewError}
+                    </p>
+                  )}
+                  <button
+                    type="submit"
+                    className="order-detail__review-submit"
+                    disabled={reviewSubmitting}
+                  >
+                    {reviewSubmitting ? "Submitting..." : "Submit review"}
+                  </button>
+                </form>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -242,12 +403,20 @@ export default function OrderDetails() {
   const { orderId } = useParams();
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [retryKey, setRetryKey] = useState(0);
+  const [reviewRetryKey, setReviewRetryKey] = useState(0);
   const [resultState, setResultState] = useState({
     key: "",
     order: null,
     error: ""
   });
   const requestKey = `${user?.id || ""}:${orderId || ""}:${retryKey}`;
+  const reviewRequestKey =
+    `${user?.id || ""}:${orderId || ""}:${reviewRetryKey}`;
+  const [reviewResultState, setReviewResultState] = useState({
+    key: "",
+    reviews: null,
+    error: ""
+  });
 
   useEffect(() => {
     if (authLoading || !isAuthenticated || !user?.id) return undefined;
@@ -277,10 +446,56 @@ export default function OrderDetails() {
     };
   }, [authLoading, isAuthenticated, orderId, requestKey, user?.id]);
 
+  useEffect(() => {
+    if (authLoading || !isAuthenticated || !user?.id || !orderId) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    getCustomerOrderReviews(orderId, controller.signal)
+      .then(reviews => {
+        if (active) {
+          setReviewResultState({
+            key: reviewRequestKey,
+            reviews,
+            error: ""
+          });
+        }
+      })
+      .catch(requestError => {
+        if (!active || requestError?.name === "AbortError") return;
+        console.error("Customer order reviews loading failed:", requestError);
+        setReviewResultState({
+          key: reviewRequestKey,
+          reviews: null,
+          error: requestError?.message || "Unable to load your order reviews."
+        });
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    authLoading,
+    isAuthenticated,
+    orderId,
+    reviewRequestKey,
+    user?.id
+  ]);
+
   const currentResult =
     resultState.key === requestKey ? resultState : null;
   const order = currentResult?.order;
   const error = currentResult?.error || "";
+  const currentReviewResult =
+    reviewResultState.key === reviewRequestKey
+      ? reviewResultState
+      : null;
+  const orderReviews = currentReviewResult?.reviews ?? null;
+  const reviewLookupError = currentReviewResult?.error || "";
 
   if (authLoading || (isAuthenticated && !currentResult)) {
     return (
@@ -334,6 +549,12 @@ export default function OrderDetails() {
   }
 
   const items = Array.isArray(order.items) ? order.items : [];
+  const reviewsByOrderItemId = new Map(
+    (orderReviews || []).map(review => [
+      String(review.order_item_id),
+      review
+    ])
+  );
   const currency = order.currency || "INR";
   const orderNumber = getOrderNumber(order);
   const orderStatus = readableStatus(order.status || "placed");
@@ -352,10 +573,24 @@ export default function OrderDetails() {
             <h1>Order Details</h1>
             <p>{orderNumber}</p>
           </div>
-          <span className={`orders-status orders-status--${getStatusTone(order.status)}`}>
-            <CheckCircle2 size={14} />
-            {orderStatus}
-          </span>
+          <div className="order-detail__header-actions">
+            <span className={`orders-status orders-status--${getStatusTone(order.status)}`}>
+              <CheckCircle2 size={14} />
+              {orderStatus}
+            </span>
+            <button
+              type="button"
+              className="orders-refresh-button"
+              onClick={() => {
+                setRetryKey(value => value + 1);
+                setReviewRetryKey(value => value + 1);
+              }}
+              aria-label="Refresh order details"
+            >
+              <RefreshCw size={15} />
+              Refresh
+            </button>
+          </div>
         </header>
 
         <section className="order-detail__card">
@@ -363,12 +598,34 @@ export default function OrderDetails() {
             <Package size={18} />
             <h2>Purchased Products</h2>
           </div>
+          {orderReviews === null && !reviewLookupError && (
+            <p className="order-detail__review-query" role="status">
+              Checking for your reviews...
+            </p>
+          )}
+          {reviewLookupError && (
+            <div className="order-detail__review-query order-detail__review-query--error" role="alert">
+              <span>{reviewLookupError}</span>
+              <button
+                type="button"
+                className="order-detail__review-toggle"
+                onClick={() => setReviewRetryKey(value => value + 1)}
+              >
+                Try again
+              </button>
+            </div>
+          )}
           {items.length ? (
             <div className="order-detail__products">
               {items.map((item, index) => (
                 <OrderProduct
                   item={item}
                   currency={currency}
+                  canReview={
+                    normalizeStatus(order.status) === "delivered" &&
+                    Array.isArray(orderReviews)
+                  }
+                  review={reviewsByOrderItemId.get(String(item.id))}
                   key={item.id || `${item.product_id || "item"}-${index}`}
                 />
               ))}

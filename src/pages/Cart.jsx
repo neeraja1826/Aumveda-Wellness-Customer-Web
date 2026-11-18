@@ -27,6 +27,11 @@ import {
     useWishlist
 } from "../context/WishlistContext";
 
+import CouponApplication from "../components/home/CouponApplication";
+import {
+    getAppliedCoupon
+} from "../services/appliedCouponStorage";
+
 import "../styles/cart.css";
 
 
@@ -91,6 +96,28 @@ function Cart() {
         setWishlistActionError
     ] =
         useState("");
+
+    const [
+        appliedCoupon,
+        setAppliedCoupon
+    ] =
+        useState(getAppliedCoupon);
+
+    const cartCoupon =
+        appliedCoupon?.placement === "cart"
+            ? appliedCoupon
+            : null;
+
+    const couponDiscount =
+        cartCoupon?.applied
+            ? Math.min(
+                Number(subtotal || 0),
+                Number(cartCoupon.discount_amount || 0)
+            )
+            : 0;
+
+    const cartTotal =
+        Math.max(0, Number(subtotal || 0) - couponDiscount);
 
 
     /* ========================================================
@@ -182,31 +209,31 @@ function Cart() {
 
         }
 
-        async function handleMoveToWishlist(item) {
-            const productId = item?.product?.id;
+    }
 
-            if (!item?.id || !productId) {
-                setWishlistActionError(
-                    "Unable to move this product to your wishlist."
-                );
-                return;
-            }
+    async function handleMoveToWishlist(item) {
+        const productId = item?.product?.id;
 
-            try {
-                setWishlistActionError("");
-                addToWishlist(productId);
-                await removeFromCart(item.id);
-            } catch (moveError) {
-                console.error(
-                    "Move cart item to wishlist failed:",
-                    moveError
-                );
-                setWishlistActionError(
-                    "Unable to move this product to your wishlist. Please try again."
-                );
-            }
+        if (!item?.id || !productId) {
+            setWishlistActionError(
+                "Unable to move this product to your wishlist."
+            );
+            return;
         }
 
+        try {
+            setWishlistActionError("");
+            await addToWishlist(productId);
+            await removeFromCart(item.id);
+        } catch (moveError) {
+            console.error(
+                "Move cart item to wishlist failed:",
+                moveError
+            );
+            setWishlistActionError(
+                "Unable to move this product to your wishlist. Please try again."
+            );
+        }
     }
 
 
@@ -1007,6 +1034,12 @@ function Cart() {
 
                     </div>
 
+                    <CouponApplication
+                        placement="cart"
+                        subtotal={subtotal}
+                        coupon={cartCoupon}
+                        onChange={setAppliedCoupon}
+                    />
 
                     <div
                         className="aumveda-cart-summary__rows"
@@ -1046,6 +1079,15 @@ function Cart() {
 
                         </div>
 
+                        {couponDiscount > 0 && (
+                            <div>
+                                <span>Coupon discount</span>
+                                <strong className="aumveda-cart-coupon-discount">
+                                    -₹{formatPrice(couponDiscount)}
+                                </strong>
+                            </div>
+                        )}
+
                     </div>
 
 
@@ -1068,7 +1110,7 @@ function Cart() {
                             ₹
                             {
                                 formatPrice(
-                                    subtotal
+                                    cartTotal
                                 )
                             }
 

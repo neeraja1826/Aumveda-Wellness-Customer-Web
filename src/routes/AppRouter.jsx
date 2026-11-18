@@ -29,6 +29,7 @@ import Checkout from "../pages/Checkout";
 import Profile from "../pages/Profile";
 import Orders from "../pages/Orders";
 import OrderDetails from "../pages/OrderDetails";
+import Notifications from "../pages/Notifications";
 
 import About from "../pages/About";
 import Contact from "../pages/Contact";
@@ -227,6 +228,11 @@ function AnimatedRoutes() {
           <Route
             path="/account/:section"
             element={<AccountSection />}
+          />
+
+          <Route
+            path="/notifications"
+            element={<Notifications />}
           />
 
           {/* MY ORDERS */}

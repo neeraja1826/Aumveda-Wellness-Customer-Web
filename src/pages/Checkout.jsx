@@ -34,6 +34,11 @@ import {
   createCustomerOrder,
   createBuyNowOrder
 } from "../services/orderService";
+import CouponApplication from "../components/home/CouponApplication";
+import {
+  clearAppliedCoupon,
+  getAppliedCoupon
+} from "../services/appliedCouponStorage";
 
 import "../styles/checkout.css";
 
@@ -239,6 +244,9 @@ function Checkout() {
   const [orderError, setOrderError] =
     useState("");
 
+  const [appliedCoupon, setAppliedCoupon] =
+    useState(getAppliedCoupon);
+
   const submittingRef = useRef(false);
 
   /* ========================================================
@@ -330,7 +338,17 @@ function Checkout() {
     ) || null;
 
   const deliveryCharge = 0;
-  const total = checkoutSubtotal + deliveryCharge;
+  const effectiveCoupon = isBuyNow ? null : appliedCoupon;
+  const couponDiscount = effectiveCoupon?.applied
+    ? Math.min(
+        checkoutSubtotal,
+        Number(effectiveCoupon.discount_amount || 0)
+      )
+    : 0;
+  const total = Math.max(
+    0,
+    checkoutSubtotal + deliveryCharge - couponDiscount
+  );
 
   /* ========================================================
      BACK
@@ -411,7 +429,13 @@ function Checkout() {
       } else {
         createdOrder = await createCustomerOrder({
           addressId: selectedAddress.id,
-          paymentMethod: "cod"
+          paymentMethod: "cod",
+          couponCode: effectiveCoupon?.applied
+            ? effectiveCoupon.code
+            : null,
+          couponPlacement: effectiveCoupon?.applied
+            ? effectiveCoupon.placement
+            : null
         });
       }
 
@@ -425,6 +449,8 @@ function Checkout() {
         sessionStorage.removeItem(
           BUY_NOW_STORAGE_KEY
         );
+      } else {
+        clearAppliedCoupon();
       }
 
       window.location.assign("/orders");
@@ -942,6 +968,15 @@ function Checkout() {
 
             {/* PRICE SUMMARY */}
 
+            {!isBuyNow && (
+              <CouponApplication
+                placement="checkout"
+                subtotal={checkoutSubtotal}
+                coupon={appliedCoupon}
+                onChange={setAppliedCoupon}
+              />
+            )}
+
             <div className="checkout-summary__rows">
               <div>
                 <span>Items</span>
@@ -963,6 +998,15 @@ function Checkout() {
                   FREE
                 </strong>
               </div>
+
+              {couponDiscount > 0 && (
+                <div>
+                  <span>Coupon discount</span>
+                  <strong className="checkout-coupon-discount">
+                    -₹{formatPrice(couponDiscount)}
+                  </strong>
+                </div>
+              )}
             </div>
 
             <div className="checkout-summary__divider" />

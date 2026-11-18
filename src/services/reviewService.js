@@ -20,11 +20,29 @@ export async function getProductReviews(productId) {
   return [];
 }
 
+export async function getCustomerOrderReviews(orderId, signal) {
+  if (!orderId) {
+    throw new Error("Order ID is required.");
+  }
+
+  const response = await api.get(
+    `/reviews/order/${encodeURIComponent(orderId)}`,
+    { signal }
+  );
+
+  if (!Array.isArray(response?.data)) {
+    throw new Error("The order reviews response was not in the expected format.");
+  }
+
+  return response.data;
+}
+
 export async function submitProductReview({
   productId,
   rating,
   title,
   reviewText,
+  orderItemId,
 }) {
   if (!productId) {
     throw new Error("Product ID is required.");
@@ -43,6 +61,7 @@ export async function submitProductReview({
     rating: Number(rating),
     title: String(title || "").trim() || null,
     review_text: String(reviewText || "").trim() || null,
+    ...(orderItemId ? { order_item_id: orderItemId } : {}),
   });
 
   return response;

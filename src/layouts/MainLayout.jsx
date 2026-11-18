@@ -2,6 +2,7 @@
 import Navbar from "../components/home/Navbar";
 import UtilityBar from "../components/home/UtilityBar";
 import Footer from "../components/home/Footer";
+import { useLocation } from "react-router-dom";
 
 /* ============================================================
    AUMVEDA — MAIN WEBSITE LAYOUT
@@ -22,6 +23,9 @@ import Footer from "../components/home/Footer";
 ============================================================ */
 
 function MainLayout({ children }) {
+  const { pathname } = useLocation();
+  const hideNavbar = pathname === "/login" || pathname === "/signup";
+
   return (
     <div
       className="aumveda-app"
@@ -36,7 +40,7 @@ function MainLayout({ children }) {
       <UtilityBar />
 
       {/* 02 — FULL-WIDTH NAVBAR */}
-      <Navbar />
+      {!hideNavbar && <Navbar />}
 
       {/* 03 — PAGE CONTENT */}
       <main

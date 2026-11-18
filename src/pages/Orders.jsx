@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -107,6 +108,98 @@ function getLatestReturnRequestByOrder(requests) {
 
     return latestByOrder;
   }, new Map());
+}
+
+function formatReturnRequestType(requestType) {
+  return requestType === "replacement" ? "Exchange" : "Return";
+}
+
+function formatReturnRequestStatus(request) {
+  const status = normalizeStatus(request.status);
+
+  if (status === "under_review" || status === "approved") {
+    return "Request processing";
+  }
+  if (status === "replacement_processing") {
+    return "Exchange processing";
+  }
+  if (status === "completed") {
+    return request.request_type === "replacement"
+      ? "Exchange complete"
+      : "Refund complete";
+  }
+  if (status === "rejected") {
+    return "Request declined";
+  }
+
+  return readableStatus(status);
+}
+
+function ReturnRequestTracking({ request }) {
+  const isExchange = request.request_type === "replacement";
+  const status = normalizeStatus(request.status);
+  const steps = [
+    "Request submitted",
+    "Pickup scheduled",
+    "Item received",
+    isExchange ? "Exchange processing" : "Refund processing",
+    isExchange ? "Exchange complete" : "Refund complete"
+  ];
+  const activeStepByStatus = {
+    requested: 0,
+    under_review: 0,
+    approved: 0,
+    pickup_scheduled: 1,
+    item_received: 2,
+    replacement_processing: 3,
+    refund_processing: 3,
+    completed: 4
+  };
+
+  if (status === "rejected" || status === "cancelled") {
+    return (
+      <div className="orders-return-tracking orders-return-tracking--terminal">
+        <strong>{formatReturnRequestType(request.request_type)} request {status}</strong>
+        <p>
+          {status === "rejected"
+            ? "This request could not be completed."
+            : "The request was cancelled."}
+        </p>
+      </div>
+    );
+  }
+
+  const activeStep = activeStepByStatus[status] ?? 0;
+  const progress = `${(activeStep / (steps.length - 1)) * 100}%`;
+
+  return (
+    <div className="orders-return-tracking">
+      <strong>{isExchange ? "Exchange tracking" : "Refund tracking"}</strong>
+      <ol
+        className="order-tracking__steps"
+        style={{ "--order-tracking-progress": progress }}
+      >
+        {steps.map((step, index) => (
+          <li
+            className={"order-tracking__step" +
+              (index <= activeStep ? " order-tracking__step--complete" : "")}
+            aria-current={index === activeStep ? "step" : undefined}
+            key={step}
+          >
+            <span className="order-tracking__node" aria-hidden="true">
+              {index <= activeStep ? <Check size={14} /> : null}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+      <p>
+        {isExchange
+          ? "Track the pickup of your original item and delivery of the exchange here."
+          : "Track your item pickup and refund progress here."}
+      </p>
+    </div>
+  );
 }
 
 function formatMoney(value, currency = CURRENCY_FALLBACK) {
@@ -607,7 +700,7 @@ export function OrderManagementActions({ order }) {
         <p className="orders-muted">Loading return information...</p>
       ) : returnError ? (
         <p className="orders-action-error" role="alert">{returnError}</p>
-      ) : canRequestReturn ? (
+      ) : canRequestReturn || returnRequests.length > 0 ? (
         <div className="orders-return-list">
           {items.map((item, index) => {
             const existingRequest = returnRequests.find(
@@ -624,15 +717,20 @@ export function OrderManagementActions({ order }) {
                 <div>
                   <strong>{item.product_name || "Ordered product"}</strong>
                   {existingRequest ? (
-                    <span>
-                      Request: {readableStatus(existingRequest.status)}
-                    </span>
+                    <>
+                      <span>
+                        {formatReturnRequestType(existingRequest.request_type)} request
+                        {" · "}
+                        {formatReturnRequestStatus(existingRequest)}
+                      </span>
+                      <ReturnRequestTracking request={existingRequest} />
+                    </>
                   ) : (
                     <span>Qty: {item.quantity}</span>
                   )}
                 </div>
 
-                {!existingRequest && item.id && (
+                {!existingRequest && item.id && canRequestReturn && (
                   <>
                     <button
                       type="button"
@@ -647,7 +745,7 @@ export function OrderManagementActions({ order }) {
                         setSubmitSuccess("");
                       }}
                     >
-                      {isOpen ? "Cancel" : "Request Return / Replacement"}
+                      {isOpen ? "Cancel" : "Request Return or Exchange"}
                     </button>
 
                     {isOpen && (
@@ -661,8 +759,8 @@ export function OrderManagementActions({ order }) {
                             value={requestType}
                             onChange={event => setRequestType(event.target.value)}
                           >
-                            <option value="return">Return & refund</option>
-                            <option value="replacement">Replacement</option>
+                            <option value="return">Return</option>
+                            <option value="replacement">Exchange</option>
                           </select>
                         </label>
                         <label>
@@ -720,7 +818,7 @@ export function OrderManagementActions({ order }) {
         </div>
       ) : (
         <p className="orders-muted">
-          Return or replacement requests are available after delivery.
+          Return and exchange requests are available after delivery.
         </p>
       )}
     </section>
@@ -993,9 +1091,9 @@ function OrderCard({
           <RotateCcw size={14} />
           <span>
             {returnRequest.request_type === "replacement"
-              ? "Replacement"
+            ? "Exchange"
               : "Return"}{" "}
-            status: <strong>{readableStatus(returnRequest.status)}</strong>
+            status: <strong>{formatReturnRequestStatus(returnRequest)}</strong>
           </span>
         </div>
       )}

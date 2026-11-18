@@ -215,6 +215,60 @@
     transform: scale(1.035);
 }
 
+.product-details-image-nav {
+    position: absolute;
+    z-index: 6;
+    top: 50%;
+
+    width: 36px;
+    height: 36px;
+
+    display: grid;
+    place-items: center;
+
+    padding: 0;
+    border: 1px solid var(--pd-border);
+    border-radius: 50%;
+    background: rgba(255, 253, 248, 0.94);
+    color: var(--pd-green);
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: background-color 180ms ease, color 180ms ease;
+}
+
+.product-details-image-nav:hover {
+    background: var(--pd-green);
+    color: #ffffff;
+}
+
+.product-details-image-nav:focus-visible {
+    outline: 2px solid var(--pd-gold);
+    outline-offset: 3px;
+}
+
+.product-details-image-nav--previous {
+    left: 10px;
+}
+
+.product-details-image-nav--next {
+    right: 10px;
+}
+
+.product-details-image-counter {
+    position: absolute;
+    z-index: 6;
+    right: 10px;
+    bottom: 10px;
+
+    padding: 4px 8px;
+    border: 1px solid var(--pd-border);
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.92);
+    color: var(--pd-green);
+    font-size: 10px;
+    font-weight: 700;
+}
+
 /* ============================================================
    DISCOUNT
 ============================================================ */

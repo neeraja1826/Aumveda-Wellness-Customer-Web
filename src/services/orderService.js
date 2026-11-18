@@ -213,7 +213,9 @@ export async function getCustomerOrderDetails(
 
 export async function createCustomerOrder({
   addressId,
-  paymentMethod = "cod"
+  paymentMethod = "cod",
+  couponCode = null,
+  couponPlacement = null
 }) {
   if (!addressId) {
     throw new Error(
@@ -233,12 +235,32 @@ export async function createCustomerOrder({
       method: "POST",
       body: {
         address_id: addressId,
-        payment_method: "cod"
+        payment_method: "cod",
+        coupon_code: couponCode,
+        coupon_placement: couponPlacement
       }
     }
   );
 
   return confirmOrder(result);
+}
+
+export async function validateCustomerCoupon({
+  code,
+  placement
+}) {
+  const result = await requestOrders(
+    "/orders/coupons/validate",
+    {
+      method: "POST",
+      body: {
+        code,
+        placement
+      }
+    }
+  );
+
+  return result?.data || result;
 }
 
 /* ============================================================

@@ -77,7 +77,9 @@ function Wishlist() {
 
     const {
         wishlistIds,
-        clearWishlist
+        clearWishlist,
+        loading: wishlistLoading,
+        error: wishlistError
     } = useWishlist();
 
     const [products, setProducts] = useState([]);
@@ -227,7 +229,7 @@ function Wishlist() {
        LOADING
     ======================================================== */
 
-    if (loading) {
+    if (loading || wishlistLoading) {
         return (
             <main className="wishlist-page">
 
@@ -257,7 +259,7 @@ function Wishlist() {
        ERROR
     ======================================================== */
 
-    if (error) {
+    if (error || wishlistError) {
         return (
             <main className="wishlist-page">
 
@@ -276,7 +278,7 @@ function Wishlist() {
                     </h2>
 
                     <p role="alert">
-                        {error}
+                        {wishlistError || error}
                     </p>
 
                     <Link

@@ -288,6 +288,37 @@
   font-size: 11px;
 }
 
+.orders-return-tracking {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--orders-border);
+  border-radius: 9px;
+  background: #fbf8f2;
+}
+
+.orders-return-tracking > strong {
+  color: var(--orders-ink);
+  font-size: 11px;
+}
+
+.orders-return-tracking .order-tracking__steps {
+  margin: 9px 0;
+  padding: 2px 0 0;
+  list-style: none;
+}
+
+.orders-return-tracking > p {
+  margin: 0;
+  color: var(--orders-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.orders-return-tracking--terminal {
+  background: #fff8f8;
+}
+
 .orders-return-form {
   width: 100%;
   display: grid;
@@ -1147,6 +1178,12 @@
   margin-bottom: 4px;
 }
 
+.order-detail__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .order-detail__header h1 {
   margin: 0;
   color: #34271e;
@@ -1191,20 +1228,162 @@
   flex-direction: column;
 }
 
-.order-detail__product {
-  display: flex;
-  align-items: center;
-  gap: 13px;
+.order-detail__product-entry {
   padding: 12px 0;
   border-bottom: 1px solid #ebe5da;
 }
 
-.order-detail__product:first-child {
+.order-detail__product-entry:first-child {
   padding-top: 0;
 }
 
-.order-detail__product:last-child {
+.order-detail__product-entry:last-child {
   border-bottom: 0;
+}
+
+.order-detail__product {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.order-detail__review {
+  margin: 10px 0 0 79px;
+}
+
+.order-detail__review-query {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--orders-border);
+  border-radius: 10px;
+  color: var(--orders-muted);
+  background: #fffdf9;
+  font-size: 11px;
+}
+
+.order-detail__review-query--error {
+  color: #9c4545;
+  border-color: #efd1d1;
+  background: #fff8f8;
+}
+
+.order-detail__review-toggle,
+.order-detail__review-submit {
+  min-height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #d4ded0;
+  border-radius: 999px;
+  color: var(--orders-green-mid);
+  background: #f0f5ec;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.order-detail__review-toggle:hover:not(:disabled) {
+  background: #e1eddd;
+}
+
+.order-detail__review-form {
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--orders-border);
+  border-radius: 14px;
+  background: #fffdf9;
+}
+
+.order-detail__review-stars {
+  display: flex;
+  gap: 4px;
+  color: #b8860b;
+}
+
+.order-detail__review-stars button {
+  padding: 2px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.order-detail__review-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--orders-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.order-detail__review-form input,
+.order-detail__review-form textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--orders-border);
+  border-radius: 8px;
+  color: var(--orders-ink);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.order-detail__review-form textarea {
+  resize: vertical;
+}
+
+.order-detail__review-submit {
+  justify-self: start;
+  color: #fff;
+  background: var(--orders-green);
+  border-color: var(--orders-green);
+}
+
+.order-detail__review-error {
+  margin: 0;
+  color: #b85c5c;
+  font-size: 11px;
+}
+
+.order-detail__review-success {
+  margin: 0;
+  color: var(--orders-green-mid);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.order-detail__review-card {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--orders-border);
+  border-radius: 12px;
+  background: #fffdf9;
+}
+
+.order-detail__review-card > strong {
+  color: var(--orders-green);
+  font-size: 11px;
+}
+
+.order-detail__review-card h3,
+.order-detail__review-card p {
+  margin: 0;
+  color: var(--orders-ink);
+  font-size: 12px;
+}
+
+.order-detail__review-card time {
+  color: var(--orders-muted);
+  font-size: 10px;
 }
 
 .order-detail__product-image {
@@ -1340,8 +1519,8 @@
   content: "";
   position: absolute;
   top: 14px;
-  left: 12.5%;
-  right: 12.5%;
+  left: 10%;
+  right: 10%;
   height: 2px;
   background: linear-gradient(
     to right,
@@ -1353,7 +1532,7 @@
 .order-tracking__step {
   position: relative;
   z-index: 1;
-  width: 25%;
+  width: 20%;
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -135,12 +135,12 @@ export async function getHomeBundles() {
    COUPONS
 ========================================================== */
 
-export async function getHomeCoupons() {
+export async function getHomeCoupons(placement = "home") {
   return cachedPublicRequest(
-    "home:coupons:v1",
+    `home:coupons:${placement}:v1`,
     async () => {
       const response = await api.get(
-        "/home/coupons"
+        `/home/coupons?placement=${encodeURIComponent(placement)}`
       );
 
       return getResponseData(response);

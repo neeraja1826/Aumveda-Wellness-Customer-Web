@@ -7,6 +7,8 @@ import {
 
 import {
     ArrowLeft,
+    ChevronLeft,
+    ChevronRight,
     Heart,
     ImageOff,
     Minus,
@@ -520,9 +522,25 @@ function ProductDetails() {
         null;
 
     const hasMultipleImages = productImages.length > 1;
+    const selectedImageIndex = Math.max(
+        0,
+        productImages.findIndex(image => image.id === selectedImage?.id)
+    );
     const reviewsAreLoading =
         reviewsLoading ||
         String(reviewsProductId) !== String(product.id);
+
+    function moveToProductImage(offset) {
+        if (!hasMultipleImages) {
+            return;
+        }
+
+        const nextIndex =
+            (selectedImageIndex + offset + productImages.length) %
+            productImages.length;
+
+        setSelectedImage(productImages[nextIndex]);
+    }
 
 
     /* ========================================================
@@ -627,13 +645,20 @@ function ProductDetails() {
        WISHLIST ACTION
     ======================================================== */
 
-    function handleWishlist() {
+    async function handleWishlist() {
 
         if (!product) {
             return;
         }
 
-        toggleWishlist(product.id);
+        try {
+            await toggleWishlist(product.id);
+        } catch (wishlistError) {
+            console.error(
+                "Product wishlist update failed:",
+                wishlistError
+            );
+        }
 
     }
 
@@ -944,7 +969,7 @@ function ProductDetails() {
 
                             <div className="product-details-thumbnails">
 
-                                {productImages.map(image => (
+                                {productImages.map((image, index) => (
 
                                     <button
                                         key={image.id}
@@ -960,6 +985,8 @@ function ProductDetails() {
                                         onClick={() =>
                                             setSelectedImage(image)
                                         }
+                                        aria-label={`Show product image ${index + 1} of ${productImages.length}`}
+                                        aria-pressed={selectedImage?.id === image.id}
                                     >
 
                                         <img
@@ -1030,7 +1057,10 @@ function ProductDetails() {
 
                                 <img
                                     src={mainImage}
-                                    alt={product.name}
+                                    alt={
+                                        selectedImage?.alt_text ||
+                                        product.name
+                                    }
                                 />
 
                             ) : (
@@ -1043,6 +1073,33 @@ function ProductDetails() {
                                     </span>
                                 </div>
 
+                            )}
+
+                            {hasMultipleImages && (
+                                <>
+                                    <button
+                                        type="button"
+                                        className="product-details-image-nav product-details-image-nav--previous"
+                                        onClick={() => moveToProductImage(-1)}
+                                        aria-label="Previous product image"
+                                    >
+                                        <ChevronLeft size={20} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="product-details-image-nav product-details-image-nav--next"
+                                        onClick={() => moveToProductImage(1)}
+                                        aria-label="Next product image"
+                                    >
+                                        <ChevronRight size={20} />
+                                    </button>
+                                    <span
+                                        className="product-details-image-counter"
+                                        aria-live="polite"
+                                    >
+                                        {selectedImageIndex + 1} / {productImages.length}
+                                    </span>
+                                </>
                             )}
 
                         </div>

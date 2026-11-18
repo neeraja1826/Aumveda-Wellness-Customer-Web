@@ -1,11 +1,13 @@
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
 
 import {
+  Bell,
   ChevronDown,
   Heart,
   LogOut,
@@ -27,8 +29,38 @@ import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 
 import { getBrandingSettings } from "../../services/siteSettingsService";
+import {
+  getCustomerNotifications,
+  markAllCustomerNotificationsRead,
+  markCustomerNotificationRead,
+} from "../../services/notificationService";
 
 import "../../styles/navbar.css";
+
+function playNotificationSound(audioContext) {
+  if (!audioContext || audioContext.state !== "running") return false;
+
+  const startTime = audioContext.currentTime;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(784, startTime);
+  oscillator.frequency.setValueAtTime(988, startTime + 0.12);
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.08, startTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.3);
+
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+  oscillator.onended = () => {
+    oscillator.disconnect();
+    gain.disconnect();
+  };
+  oscillator.start(startTime);
+  oscillator.stop(startTime + 0.31);
+  return true;
+}
 
 /* ============================================================
    AUMVEDA — CUSTOMER WEB NAVBAR
@@ -96,6 +128,17 @@ export default function Navbar() {
     useState(false);
   const [profileMenuOpen, setProfileMenuOpen] =
     useState(false);
+  const [notificationMenuOpen, setNotificationMenuOpen] =
+    useState(false);
+  const [notificationData, setNotificationData] = useState({
+    userId: null,
+    items: [],
+    unreadCount: 0,
+  });
+  const [notificationsLoading, setNotificationsLoading] =
+    useState(false);
+  const [notificationError, setNotificationError] =
+    useState("");
 
   const [logoFailed, setLogoFailed] =
     useState(false);
@@ -108,6 +151,146 @@ export default function Navbar() {
   });
 
   const profileWrapperRef = useRef(null);
+  const notificationWrapperRef = useRef(null);
+  const notificationAudioContextRef = useRef(null);
+  const notificationAudioReadyRef = useRef(false);
+  const pendingNotificationSoundRef = useRef(false);
+  const notificationBaselineRef = useRef({
+    userId: null,
+    ids: new Set(),
+    initialized: false,
+  });
+  const notificationsBelongToCurrentUser =
+    notificationData.userId === user?.id;
+  const notifications = notificationsBelongToCurrentUser
+    ? notificationData.items
+    : [];
+  const unreadNotificationCount = notificationsBelongToCurrentUser
+    ? notificationData.unreadCount
+    : 0;
+
+  useEffect(() => {
+    let active = true;
+
+    function removeUnlockListeners() {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    }
+
+    function unlockAudio() {
+      if (notificationAudioReadyRef.current) return;
+
+      const AudioContextConstructor =
+        window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioContextConstructor) {
+        console.warn("Notification sound is not supported by this browser.");
+        removeUnlockListeners();
+        return;
+      }
+
+      try {
+        const audioContext =
+          notificationAudioContextRef.current ||
+          new AudioContextConstructor();
+        notificationAudioContextRef.current = audioContext;
+
+        audioContext.resume().then(() => {
+          if (!active || audioContext.state !== "running") return;
+
+          notificationAudioReadyRef.current = true;
+          removeUnlockListeners();
+
+          if (pendingNotificationSoundRef.current) {
+            pendingNotificationSoundRef.current =
+              !playNotificationSound(audioContext);
+          }
+        }).catch((error) => {
+          console.warn("Unable to enable notification sound:", error);
+        });
+      } catch (error) {
+        console.warn("Unable to enable notification sound:", error);
+      }
+    }
+
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+
+    return () => {
+      active = false;
+      removeUnlockListeners();
+      if (notificationAudioContextRef.current) {
+        notificationAudioContextRef.current.close().catch((error) => {
+          console.warn("Unable to close notification audio:", error);
+        });
+        notificationAudioContextRef.current = null;
+      }
+    };
+  }, []);
+
+  const refreshNotifications = useCallback(async (
+    showLoading = false,
+    signal,
+  ) => {
+    if (!isAuthenticated || !user?.id) {
+      notificationBaselineRef.current = {
+        userId: null,
+        ids: new Set(),
+        initialized: false,
+      };
+      return;
+    }
+
+    if (showLoading) {
+      setNotificationsLoading(true);
+    }
+
+    try {
+      const result = await getCustomerNotifications({
+        limit: 10,
+        signal,
+      });
+      const currentIds = new Set(
+        result.items
+          .map((notification) => notification.id)
+          .filter((id) => id !== null && id !== undefined)
+          .map(String),
+      );
+      const baseline = notificationBaselineRef.current;
+
+      if (
+        baseline.initialized &&
+        baseline.userId === user.id &&
+        Array.from(currentIds).some((id) => !baseline.ids.has(id))
+      ) {
+        pendingNotificationSoundRef.current =
+          !playNotificationSound(notificationAudioContextRef.current);
+      }
+
+      notificationBaselineRef.current = {
+        userId: user.id,
+        ids: currentIds,
+        initialized: true,
+      };
+      setNotificationData({
+        userId: user.id,
+        items: result.items,
+        unreadCount: result.unreadCount,
+      });
+      setNotificationError("");
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+
+      console.error("Customer notifications failed to load:", error);
+      setNotificationError(
+        error?.message || "Unable to load notifications.",
+      );
+    } finally {
+      if (showLoading) {
+        setNotificationsLoading(false);
+      }
+    }
+  }, [isAuthenticated, user]);
 
   /* ==========================================================
      FETCH BRANDING FROM EXISTING CMS
@@ -202,6 +385,7 @@ export default function Navbar() {
   function closeMenus() {
     setMobileMenuOpen(false);
     setProfileMenuOpen(false);
+    setNotificationMenuOpen(false);
   }
 
   /* ==========================================================
@@ -265,6 +449,92 @@ export default function Navbar() {
     navigate("/profile");
   }
 
+  function handleNotificationToggle() {
+    if (authLoading) return;
+
+    if (!isAuthenticated) {
+      closeMenus();
+      navigate("/login");
+      return;
+    }
+
+    setProfileMenuOpen(false);
+    setMobileMenuOpen(false);
+    if (notificationMenuOpen) {
+      setNotificationMenuOpen(false);
+    } else {
+      setNotificationMenuOpen(true);
+      refreshNotifications();
+    }
+  }
+
+  async function handleMarkAllNotificationsRead() {
+    try {
+      await markAllCustomerNotificationsRead();
+      setNotificationData((previous) =>
+        previous.userId === user?.id
+          ? {
+              ...previous,
+              items: previous.items.map((notification) => ({
+                ...notification,
+                is_read: true,
+              })),
+              unreadCount: 0,
+            }
+          : previous,
+      );
+      setNotificationError("");
+    } catch (error) {
+      console.error("Unable to mark notifications as read:", error);
+      setNotificationError(
+        error?.message || "Unable to mark notifications as read.",
+      );
+    }
+  }
+
+  async function handleNotificationClick(notification) {
+    if (!notification.is_read) {
+      try {
+        await markCustomerNotificationRead(notification.id);
+        setNotificationData((previous) =>
+          previous.userId === user?.id
+            ? {
+                ...previous,
+                items: previous.items.map((item) =>
+                  item.id === notification.id
+                    ? { ...item, is_read: true }
+                    : item,
+                ),
+                unreadCount: Math.max(0, previous.unreadCount - 1),
+              }
+            : previous,
+        );
+        setNotificationError("");
+      } catch (error) {
+        console.error("Unable to mark notification as read:", error);
+        setNotificationError(
+          error?.message || "Unable to update this notification.",
+        );
+        return;
+      }
+    }
+
+    setNotificationMenuOpen(false);
+    navigate(
+      `/notifications?notification=${encodeURIComponent(notification.id)}`,
+    );
+  }
+
+  function formatNotificationTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+
+    return new Intl.DateTimeFormat("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  }
+
   /* ==========================================================
      ACCOUNT MENU
   ========================================================== */
@@ -279,6 +549,7 @@ export default function Navbar() {
     }
 
     setMobileMenuOpen(false);
+    setNotificationMenuOpen(false);
 
     setProfileMenuOpen(
       (previous) => !previous
@@ -315,6 +586,25 @@ export default function Navbar() {
     setProfileMenuOpen(false);
   }, [location.pathname, location.hash]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const controller = new AbortController();
+    const refresh = () =>
+      refreshNotifications(false, controller.signal);
+    const refreshOnFocus = () => refresh();
+
+    refreshNotifications(true, controller.signal);
+    const intervalId = window.setInterval(refresh, 15_000);
+    window.addEventListener("focus", refreshOnFocus);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [isAuthenticated, refreshNotifications, user?.id]);
+
   /* ==========================================================
      OUTSIDE CLICK / ESCAPE
   ========================================================== */
@@ -329,12 +619,20 @@ export default function Navbar() {
       ) {
         setProfileMenuOpen(false);
       }
+
+      if (
+        notificationWrapperRef.current &&
+        !notificationWrapperRef.current.contains(event.target)
+      ) {
+        setNotificationMenuOpen(false);
+      }
     }
 
     function onEscape(event) {
       if (event.key === "Escape") {
         setProfileMenuOpen(false);
         setMobileMenuOpen(false);
+        setNotificationMenuOpen(false);
       }
     }
 
@@ -546,6 +844,150 @@ export default function Navbar() {
               </span>
             </button>
 
+            {/* NOTIFICATIONS */}
+
+            <div
+              className="aumveda-notification-wrapper"
+              ref={notificationWrapperRef}
+            >
+              <button
+                type="button"
+                className={
+                  `aumveda-action ` +
+                  (notificationMenuOpen
+                    ? "aumveda-action--active"
+                    : "")
+                }
+                onClick={handleNotificationToggle}
+                disabled={authLoading}
+                aria-label={
+                  `Notifications, ${unreadNotificationCount} unread`
+                }
+                aria-haspopup="dialog"
+                aria-expanded={notificationMenuOpen}
+                aria-controls={
+                  notificationMenuOpen
+                    ? "aumveda-notification-menu"
+                    : undefined
+                }
+                title="Notifications"
+              >
+                <span className="aumveda-action__icon-shell">
+                  <Bell size={20} strokeWidth={1.8} />
+                  {unreadNotificationCount > 0 && (
+                    <span className="aumveda-action__badge">
+                      {unreadNotificationCount > 99
+                        ? "99+"
+                        : unreadNotificationCount}
+                    </span>
+                  )}
+                </span>
+                <span className="aumveda-action__label">
+                  Notifications
+                </span>
+              </button>
+
+              {isAuthenticated && notificationMenuOpen && (
+                <div
+                  id="aumveda-notification-menu"
+                  className="aumveda-notification-menu"
+                  role="dialog"
+                  aria-labelledby="aumveda-notification-title"
+                >
+                  <div className="aumveda-notification-menu__header">
+                    <div>
+                      <h2 id="aumveda-notification-title">
+                        Notifications
+                      </h2>
+                      <p role="status" aria-live="polite">
+                        {unreadNotificationCount
+                          ? `${unreadNotificationCount} unread`
+                          : "You're all caught up"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="aumveda-notification-menu__mark-all"
+                      onClick={handleMarkAllNotificationsRead}
+                      disabled={
+                        unreadNotificationCount === 0 ||
+                        notificationsLoading
+                      }
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+
+                  {notificationError && (
+                    <div
+                      className="aumveda-notification-menu__error"
+                      role="alert"
+                    >
+                      <span>{notificationError}</span>
+                      <button
+                        type="button"
+                        onClick={() => refreshNotifications(true)}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+
+                  {notificationsLoading ? (
+                    <p
+                      className="aumveda-notification-menu__state"
+                      role="status"
+                    >
+                      Loading notifications...
+                    </p>
+                  ) : notifications.length === 0 ? (
+                    <p className="aumveda-notification-menu__state">
+                      No notifications yet.
+                    </p>
+                  ) : (
+                    <ul className="aumveda-notification-menu__list">
+                      {notifications.map((notification) => (
+                        <li key={notification.id}>
+                          <button
+                            type="button"
+                            className={
+                              "aumveda-notification-item" +
+                              (notification.is_read
+                                ? ""
+                                : " aumveda-notification-item--unread")
+                            }
+                            onClick={() =>
+                              handleNotificationClick(notification)
+                            }
+                            aria-label={
+                              `${notification.title}. ${notification.message}` +
+                              (notification.is_read ? "" : ". Unread")
+                            }
+                          >
+                            <span className="aumveda-notification-item__content">
+                              <strong>{notification.title}</strong>
+                              <span>{notification.message}</span>
+                              <time dateTime={notification.created_at}>
+                                {formatNotificationTime(
+                                  notification.created_at,
+                                )}
+                              </time>
+                            </span>
+                            {!notification.is_read && (
+                              <span
+                                className="aumveda-notification-item__dot"
+                                aria-hidden="true"
+                              />
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* PROFILE */}
 
             <div
@@ -648,15 +1090,7 @@ export default function Navbar() {
                       </div>
                     </div>
 
-                    <Link
-                      to="/profile"
-                      onClick={closeMenus}
-                      className="aumveda-profile-menu__profile-link"
-                      role="menuitem"
-                    >
-                      <UserRound size={16} />
-                      My Profile
-                    </Link>
+                    
 
                     <div className="aumveda-profile-menu__divider" />
 
