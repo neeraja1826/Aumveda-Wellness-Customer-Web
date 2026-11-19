@@ -1,20 +1,16 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, TicketPercent, X } from "lucide-react";
 
-import { getHomeCoupons } from "../../services/homeService";
-import { validateCustomerCoupon } from "../../services/orderService";
+import {
+  getAvailableCustomerCoupons,
+  validateCustomerCoupon
+} from "../../services/orderService";
 import {
   clearAppliedCoupon,
   saveAppliedCoupon
 } from "../../services/appliedCouponStorage";
 
 import "../../styles/coupon-application.css";
-
-function getCouponList(response) {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.data)) return response.data;
-  return [];
-}
 
 function formatPrice(value) {
   return new Intl.NumberFormat("en-IN", {
@@ -26,7 +22,11 @@ export default function CouponApplication({
   placement,
   subtotal,
   coupon,
-  onChange
+  onChange,
+  variantId,
+  quantity,
+  contextKey,
+  persist = true
 }) {
   const [coupons, setCoupons] = useState([]);
   const [enteredCode, setEnteredCode] = useState(null);
@@ -38,9 +38,13 @@ export default function CouponApplication({
   useEffect(() => {
     let active = true;
 
-    getHomeCoupons(placement)
-      .then((response) => {
-        if (active) setCoupons(getCouponList(response));
+    getAvailableCustomerCoupons({
+      placement,
+      variantId,
+      quantity
+    })
+      .then((availableCoupons) => {
+        if (active) setCoupons(availableCoupons);
       })
       .catch((loadError) => {
         if (!active) return;
@@ -54,7 +58,7 @@ export default function CouponApplication({
     return () => {
       active = false;
     };
-  }, [placement]);
+  }, [placement, variantId, quantity, contextKey]);
 
   useEffect(() => {
     if (!coupon?.applied || !coupon.code) return undefined;
@@ -64,7 +68,9 @@ export default function CouponApplication({
 
     validateCustomerCoupon({
       code: coupon.code,
-      placement: appliedPlacement
+      placement: appliedPlacement,
+      variantId,
+      quantity
     })
       .then((quote) => {
         if (!active) return;
@@ -73,13 +79,13 @@ export default function CouponApplication({
           placement: appliedPlacement,
           applied: true
         };
-        saveAppliedCoupon(updatedCoupon);
+        if (persist) saveAppliedCoupon(updatedCoupon);
         onChange(updatedCoupon);
         setError("");
       })
       .catch((validationError) => {
         if (!active) return;
-        clearAppliedCoupon();
+        if (persist) clearAppliedCoupon();
         onChange(null);
         setError(validationError?.message || "This coupon is no longer valid.");
       });
@@ -92,33 +98,39 @@ export default function CouponApplication({
     coupon?.code,
     coupon?.placement,
     onChange,
+    persist,
     placement,
-    subtotal
+    subtotal,
+    variantId,
+    quantity,
+    contextKey
   ]);
 
-  async function handleApply(event) {
-    event.preventDefault();
-    const normalizedCode = code.trim().toUpperCase();
+  async function applyCoupon(rawCode) {
+    const normalizedCode = String(rawCode || "").trim().toUpperCase();
 
     if (!normalizedCode) {
       setError("Enter a coupon code.");
       return;
     }
 
+    setEnteredCode(normalizedCode);
     setApplying(true);
     setError("");
 
     try {
       const quote = await validateCustomerCoupon({
         code: normalizedCode,
-        placement
+        placement,
+        variantId,
+        quantity
       });
       const nextCoupon = {
         ...quote,
         placement,
         applied: true
       };
-      saveAppliedCoupon(nextCoupon);
+      if (persist) saveAppliedCoupon(nextCoupon);
       onChange(nextCoupon);
     } catch (applyError) {
       setError(applyError?.message || "Unable to apply this coupon.");
@@ -127,8 +139,13 @@ export default function CouponApplication({
     }
   }
 
+  function handleApply(event) {
+    event.preventDefault();
+    return applyCoupon(code);
+  }
+
   function handleRemove() {
-    clearAppliedCoupon();
+    if (persist) clearAppliedCoupon();
     onChange(null);
     setError("");
   }
@@ -139,7 +156,7 @@ export default function CouponApplication({
         <TicketPercent size={18} aria-hidden="true" />
         <div>
           <strong>Apply a coupon</strong>
-          <span>Only coupons enabled for this page are shown.</span>
+          <span>Only coupons eligible for your order are shown.</span>
         </div>
       </div>
 
@@ -151,26 +168,27 @@ export default function CouponApplication({
             onChange={(event) => setEnteredCode(event.target.value)}
             placeholder="Enter coupon code"
             autoComplete="off"
+            disabled={applying}
             aria-invalid={Boolean(error)}
           />
         </label>
-        {coupon?.applied ? (
+        <button
+          type="submit"
+          className="coupon-application__apply"
+          disabled={applying}
+        >
+          {applying ? "Checking..." : coupon?.applied ? "Replace" : "Apply"}
+        </button>
+        {coupon?.applied && (
           <button
             type="button"
             className="coupon-application__remove"
+            disabled={applying}
             onClick={handleRemove}
             aria-label={`Remove coupon ${coupon.code}`}
           >
             <X size={15} />
             Remove
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className="coupon-application__apply"
-            disabled={applying}
-          >
-            {applying ? "Checking..." : "Apply"}
           </button>
         )}
       </form>
@@ -192,21 +210,47 @@ export default function CouponApplication({
             Available here
           </span>
           {coupons.map((availableCoupon) => (
-            <button
-              type="button"
+            <div
               key={availableCoupon.id || availableCoupon.code}
               className="coupon-application__coupon"
-              onClick={() => setEnteredCode(availableCoupon.code || "")}
-              aria-label={`Use coupon ${availableCoupon.code}`}
             >
-              <strong>{availableCoupon.code}</strong>
-              <span>
-                {availableCoupon.description ||
-                  (availableCoupon.discount_type === "percentage"
-                    ? `${availableCoupon.discount_value}% off`
-                    : `₹${formatPrice(availableCoupon.discount_value)} off`)}
-              </span>
-            </button>
+              <div className="coupon-application__coupon-details">
+                <strong>{availableCoupon.code}</strong>
+                <span>
+                  {availableCoupon.description ||
+                    (availableCoupon.discount_type === "percentage"
+                      ? `${availableCoupon.discount_value}% off`
+                      : `₹${formatPrice(availableCoupon.discount_value)} off`)}
+                </span>
+                {Number(availableCoupon.min_order_value) > 0 && (
+                  <small>
+                    Min. order ₹{formatPrice(availableCoupon.min_order_value)}
+                  </small>
+                )}
+                {availableCoupon.discount_type === "percentage" &&
+                  Number(availableCoupon.max_discount_amount) > 0 && (
+                    <small>
+                      Maximum savings ₹
+                      {formatPrice(availableCoupon.max_discount_amount)}
+                    </small>
+                  )}
+              </div>
+              <button
+                type="button"
+                disabled={
+                  applying ||
+                  (coupon?.applied &&
+                    coupon.code === availableCoupon.code)
+                }
+                onClick={() => applyCoupon(availableCoupon.code)}
+                aria-label={`Apply coupon ${availableCoupon.code}`}
+              >
+                {coupon?.applied &&
+                coupon.code === availableCoupon.code
+                  ? "Applied"
+                  : "Apply"}
+              </button>
+            </div>
           ))}
         </div>
       )}

@@ -1,5 +1,25 @@
 import api from "./api";
 
+const ALLOWED_REVIEW_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+]);
+
+export function getReviewImageError(image) {
+  if (!image) {
+    return "";
+  }
+
+  if (!ALLOWED_REVIEW_IMAGE_TYPES.has(image.type?.toLowerCase())) {
+    return "Choose a JPEG, PNG, or WebP image.";
+  }
+
+  return "";
+}
+
+
 export async function getProductReviews(productId) {
   if (!productId) {
     throw new Error("Product ID is required.");
@@ -43,6 +63,7 @@ export async function submitProductReview({
   title,
   reviewText,
   orderItemId,
+  image,
 }) {
   if (!productId) {
     throw new Error("Product ID is required.");
@@ -56,13 +77,24 @@ export async function submitProductReview({
     throw new Error("Please enter a title or written feedback.");
   }
 
-  const response = await api.post("/reviews", {
+  const payload = {
     product_id: productId,
     rating: Number(rating),
     title: String(title || "").trim() || null,
     review_text: String(reviewText || "").trim() || null,
     ...(orderItemId ? { order_item_id: orderItemId } : {}),
-  });
+  };
 
-  return response;
+  if (image) {
+    const formData = new FormData();
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) {
+        formData.append(key, String(value));
+      }
+    });
+    formData.append("image", image);
+    return api.post("/reviews", formData);
+  }
+
+  return api.post("/reviews", payload);
 }

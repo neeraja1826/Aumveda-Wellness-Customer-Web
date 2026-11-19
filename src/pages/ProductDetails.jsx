@@ -16,7 +16,8 @@ import {
     Plus,
     ShoppingBag,
     Sparkles,
-    Star
+    Star,
+    X
 } from "lucide-react";
 
 import {
@@ -32,6 +33,7 @@ import {
 
 import {
     getProductReviews,
+    getReviewImageError,
     submitProductReview
 } from "../services/reviewService";
 
@@ -48,7 +50,7 @@ import {
 } from "../context/WishlistContext";
 
 import ProductGrid from "../components/products/ProductGrid";
-
+import FAQChatbot from "../components/chatbot/FAQChatbot";
 import "../styles/product-details.css";
 
 
@@ -158,10 +160,12 @@ function ProductDetails() {
     const [reviewRating, setReviewRating] = useState(5);
     const [reviewTitle, setReviewTitle] = useState("");
     const [reviewText, setReviewText] = useState("");
+    const [reviewImage, setReviewImage] = useState(null);
+    const [reviewImagePreview, setReviewImagePreview] = useState("");
+    const [reviewFormOpen, setReviewFormOpen] = useState(false);
     const [reviewSubmitting, setReviewSubmitting] = useState(false);
     const [reviewError, setReviewError] = useState("");
     const [reviewMessage, setReviewMessage] = useState("");
-
 
     /* ========================================================
        RECENTLY VIEWED TRACKING STATE
@@ -173,6 +177,13 @@ function ProductDetails() {
     ======================================================== */
 
     const recordedProductRef = useRef(null);
+    const reviewImageInputRef = useRef(null);
+
+    useEffect(() => () => {
+        if (reviewImagePreview) {
+            URL.revokeObjectURL(reviewImagePreview);
+        }
+    }, [reviewImagePreview]);
 
     useEffect(() => {
         if (!product?.id) {
@@ -232,7 +243,8 @@ function ProductDetails() {
                 productId: product.id,
                 rating: reviewRating,
                 title: reviewTitle,
-                reviewText
+                reviewText,
+                image: reviewImage
             });
 
             const submittedReview = result?.data;
@@ -248,8 +260,14 @@ function ProductDetails() {
                 result?.message ||
                 "Your review is published and now visible."
             );
+            setReviewFormOpen(false);
             setReviewTitle("");
             setReviewText("");
+            setReviewImage(null);
+            setReviewImagePreview("");
+            if (reviewImageInputRef.current) {
+                reviewImageInputRef.current.value = "";
+            }
             setReviewRating(5);
         } catch (reviewSubmitError) {
             console.error("Product review submission failed:", reviewSubmitError);
@@ -881,6 +899,7 @@ function ProductDetails() {
                     <p>Loading product...</p>
 
                 </div>
+                <FAQChatbot />
             </main>
         );
 
@@ -914,6 +933,7 @@ function ProductDetails() {
                     </button>
 
                 </div>
+                <FAQChatbot />
             </main>
         );
 
@@ -1521,11 +1541,47 @@ function ProductDetails() {
                         <h2 id="product-reviews-heading">Customer Reviews</h2>
                     </div>
 
-                    <form
-                        className="product-review-form"
-                        onSubmit={handleSubmitReview}
-                    >
-                        <strong>Write a review</strong>
+                    {!reviewFormOpen && (
+                        <button
+                            className="product-review-open"
+                            type="button"
+                            aria-expanded={reviewFormOpen}
+                            onClick={() => {
+                                setReviewError("");
+                                setReviewMessage("");
+                                setReviewFormOpen(true);
+                            }}
+                        >
+                            Write a review
+                        </button>
+                    )}
+
+                    {reviewMessage && (
+                        <p
+                            className="product-review-message product-review-message--success"
+                            role="status"
+                        >
+                            {reviewMessage}
+                        </p>
+                    )}
+
+                    {reviewFormOpen && (
+                      <form
+                          className="product-review-form"
+                          onSubmit={handleSubmitReview}
+                      >
+                        <div className="product-review-form-heading">
+                            <strong>Write a review</strong>
+                            <button
+                                type="button"
+                                className="product-review-close"
+                                aria-label="Close review form"
+                                onClick={() => setReviewFormOpen(false)}
+                                disabled={reviewSubmitting}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
                         <span className="product-review-hint">
                             Reviews are published immediately. You must have purchased this product to submit a review.
                         </span>
@@ -1572,17 +1628,54 @@ function ProductDetails() {
                             disabled={reviewSubmitting}
                         />
 
+                        <label htmlFor="product-review-image">
+                            Add a photo (optional)
+                        </label>
+                        <input
+                            ref={reviewImageInputRef}
+                            id="product-review-image"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            onChange={event => {
+                                const file = event.target.files?.[0] || null;
+                                const imageError = getReviewImageError(file);
+                                if (imageError) {
+                                    setReviewError(imageError);
+                                    event.target.value = "";
+                                    return;
+                                }
+                                setReviewImage(file);
+                                setReviewImagePreview(
+                                    file ? URL.createObjectURL(file) : ""
+                                );
+                                setReviewError("");
+                            }}
+                            disabled={reviewSubmitting}
+                        />
+                        {reviewImagePreview && (
+                            <div className="product-review-image-preview">
+                                <img src={reviewImagePreview} alt="Review upload preview" />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setReviewImage(null);
+                                        setReviewImagePreview("");
+                                        if (reviewImageInputRef.current) {
+                                            reviewImageInputRef.current.value = "";
+                                        }
+                                    }}
+                                    disabled={reviewSubmitting}
+                                >
+                                    Remove photo
+                                </button>
+                            </div>
+                        )}
+
                         {reviewError && (
                             <p className="product-review-message product-review-message--error" role="alert">
                                 {reviewError}
                             </p>
                         )}
-                        {reviewMessage && (
-                            <p className="product-review-message product-review-message--success" role="status">
-                                {reviewMessage}
-                            </p>
-                        )}
-
                         <button
                             className="product-review-submit"
                             type="submit"
@@ -1590,15 +1683,33 @@ function ProductDetails() {
                         >
                             {reviewSubmitting ? "Submitting..." : "Submit Review"}
                         </button>
-                    </form>
+                      </form>
+                    )}
 
                     <div className="product-review-list">
                         <div className="product-review-list-heading">
-                            <h3>Customer Reviews</h3>
+                            <div>
+                                <h3>Customer Reviews</h3>
+                                {reviews.length > 0 && (
+                                    <span>
+                                        {reviews.length} review{reviews.length === 1 ? "" : "s"}
+                                    </span>
+                                )}
+                            </div>
                             {reviews.length > 0 && (
-                                <span>
-                                    {reviews.length} review{reviews.length === 1 ? "" : "s"}
-                                </span>
+                                <button
+                                    className="product-review-view-all"
+                                    type="button"
+                                    onClick={() =>
+                                        navigate(
+                                            `/products/${encodeURIComponent(
+                                                product?.slug || slug
+                                            )}/reviews`
+                                        )
+                                    }
+                                >
+                                    View all reviews
+                                </button>
                             )}
                         </div>
 
@@ -1609,32 +1720,42 @@ function ProductDetails() {
                                 No reviews yet. Be the first to share your experience.
                             </p>
                         ) : (
-                            reviews.map(review => (
-                                <article className="product-review-card" key={review.id}>
-                                    <div className="product-review-card-heading">
-                                        <div aria-label={`${review.rating} out of 5 stars`}>
-                                            {[1, 2, 3, 4, 5].map(star => (
-                                                <Star
-                                                    key={star}
-                                                    size={14}
-                                                    fill={star <= Number(review.rating) ? "currentColor" : "none"}
-                                                />
-                                            ))}
+                            <div className="product-review-carousel">
+                                {reviews.slice(0, 4).map(review => (
+                                    <article className="product-review-card" key={review.id}>
+                                        <div className="product-review-card-heading">
+                                            <div aria-label={`${review.rating} out of 5 stars`}>
+                                                {[1, 2, 3, 4, 5].map(star => (
+                                                    <Star
+                                                        key={star}
+                                                        size={14}
+                                                        fill={star <= Number(review.rating) ? "currentColor" : "none"}
+                                                    />
+                                                ))}
+                                            </div>
+                                            {review.created_at && (
+                                                <time dateTime={review.created_at}>
+                                                    {new Date(review.created_at).toLocaleDateString("en-IN", {
+                                                        day: "2-digit",
+                                                        month: "short",
+                                                        year: "numeric"
+                                                    })}
+                                                </time>
+                                            )}
                                         </div>
-                                        {review.created_at && (
-                                            <time dateTime={review.created_at}>
-                                                {new Date(review.created_at).toLocaleDateString("en-IN", {
-                                                    day: "2-digit",
-                                                    month: "short",
-                                                    year: "numeric"
-                                                })}
-                                            </time>
+                                        {review.title && <h4>{review.title}</h4>}
+                                        {review.review_text && <p>{review.review_text}</p>}
+                                        {review.image_url && (
+                                            <img
+                                                className="product-review-image"
+                                                src={review.image_url}
+                                                alt="Customer review"
+                                                loading="lazy"
+                                            />
                                         )}
-                                    </div>
-                                    {review.title && <h4>{review.title}</h4>}
-                                    {review.review_text && <p>{review.review_text}</p>}
-                                </article>
-                            ))
+                                    </article>
+                                ))}
+                            </div>
                         )}
                     </div>
                 </section>
@@ -1675,6 +1796,8 @@ function ProductDetails() {
                 )}
 
             </div>
+
+            <FAQChatbot />
 
         </main>
 

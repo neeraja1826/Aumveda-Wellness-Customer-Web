@@ -1,0 +1,120 @@
+.product-reviews-page {
+  width: min(100% - 32px, 1100px);
+  margin: 0 auto;
+  padding: 28px 0 56px;
+  color: #173c2b;
+}
+
+.product-reviews-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid #e6dfd2;
+  border-radius: 8px;
+  color: #173c2b;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.product-reviews-header {
+  margin: 24px 0 18px;
+}
+
+.product-reviews-header > p {
+  margin: 0 0 7px;
+  color: #9a7941;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 1.4px;
+}
+
+.product-reviews-header h1 {
+  margin: 0;
+  color: #123d2b;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 600;
+}
+
+.product-reviews-header > span {
+  display: block;
+  margin-top: 8px;
+  color: #71665d;
+  font-size: 13px;
+}
+
+.product-reviews-all-list {
+  display: grid;
+  gap: 12px;
+}
+
+.product-reviews-all-card {
+  padding: 16px;
+  border: 1px solid #e6dfd2;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.product-reviews-all-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-reviews-stars {
+  display: flex;
+  gap: 3px;
+  color: #b9934a;
+}
+
+.product-reviews-all-card time {
+  color: #82786e;
+  font-size: 11px;
+}
+
+.product-reviews-all-card h2 {
+  margin: 10px 0 4px;
+  color: #173c2b;
+  font-size: 15px;
+}
+
+.product-reviews-all-card > p {
+  margin: 6px 0 0;
+  color: #71665d;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-line;
+}
+
+.product-reviews-all-card > img {
+  display: block;
+  width: min(100%, 380px);
+  max-height: 380px;
+  margin-top: 12px;
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+.product-reviews-state {
+  margin: 18px 0;
+  color: #71665d;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.product-reviews-error button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  background: #123d2b;
+  font: inherit;
+  cursor: pointer;
+}

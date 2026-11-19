@@ -21,6 +21,7 @@ import SignupPage from "../pages/SignupPage";
 
 import Products from "../pages/Products";
 import ProductDetails from "../pages/ProductDetails";
+import ProductReviews from "../pages/ProductReviews";
 
 import Wishlist from "../pages/Wishlist";
 import Cart from "../pages/Cart";
@@ -180,6 +181,11 @@ function AnimatedRoutes() {
           <Route
             path="/products/:slug"
             element={<ProductDetails />}
+          />
+
+          <Route
+            path="/products/:slug/reviews"
+            element={<ProductReviews />}
           />
 
           <Route

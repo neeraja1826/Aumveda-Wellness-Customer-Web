@@ -1339,6 +1339,37 @@
   resize: vertical;
 }
 
+.order-detail__review-image-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.order-detail__review-image-preview img {
+  width: 88px;
+  height: 88px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.order-detail__review-image-preview button {
+  padding: 6px 0;
+  border: 0;
+  color: var(--orders-green);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.order-detail__review-image {
+  display: block;
+  width: min(100%, 320px);
+  max-height: 320px;
+  border-radius: 9px;
+  object-fit: cover;
+}
+
 .order-detail__review-submit {
   justify-self: start;
   color: #fff;

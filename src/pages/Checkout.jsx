@@ -219,6 +219,12 @@ function Checkout() {
   const checkoutSubtotal = isBuyNow
     ? buyNowPrice * buyNowQuantity
     : Number(cartSubtotal || 0);
+  const couponContextKey = checkoutItems
+    .map(item =>
+      `${item?.variant?.id || item?.variant_id || item?.variantId || item?.id}:${Number(item?.quantity || 1)}`
+    )
+    .sort()
+    .join("|");
 
   /* ========================================================
      ADDRESS STATE
@@ -246,6 +252,7 @@ function Checkout() {
 
   const [appliedCoupon, setAppliedCoupon] =
     useState(getAppliedCoupon);
+  const [buyNowCoupon, setBuyNowCoupon] = useState(null);
 
   const submittingRef = useRef(false);
 
@@ -338,7 +345,7 @@ function Checkout() {
     ) || null;
 
   const deliveryCharge = 0;
-  const effectiveCoupon = isBuyNow ? null : appliedCoupon;
+  const effectiveCoupon = isBuyNow ? buyNowCoupon : appliedCoupon;
   const couponDiscount = effectiveCoupon?.applied
     ? Math.min(
         checkoutSubtotal,
@@ -424,7 +431,13 @@ function Checkout() {
           addressId: selectedAddress.id,
           variantId: buyNowVariantId,
           quantity: buyNowQuantity,
-          paymentMethod: "cod"
+          paymentMethod: "cod",
+          couponCode: effectiveCoupon?.applied
+            ? effectiveCoupon.code
+            : null,
+          couponPlacement: effectiveCoupon?.applied
+            ? effectiveCoupon.placement
+            : null
         });
       } else {
         createdOrder = await createCustomerOrder({
@@ -968,14 +981,16 @@ function Checkout() {
 
             {/* PRICE SUMMARY */}
 
-            {!isBuyNow && (
-              <CouponApplication
-                placement="checkout"
-                subtotal={checkoutSubtotal}
-                coupon={appliedCoupon}
-                onChange={setAppliedCoupon}
-              />
-            )}
+            <CouponApplication
+              placement="checkout"
+              subtotal={checkoutSubtotal}
+              coupon={effectiveCoupon}
+              onChange={isBuyNow ? setBuyNowCoupon : setAppliedCoupon}
+              variantId={isBuyNow ? buyNowVariantId : null}
+              quantity={isBuyNow ? buyNowQuantity : null}
+              contextKey={couponContextKey}
+              persist={!isBuyNow}
+            />
 
             <div className="checkout-summary__rows">
               <div>

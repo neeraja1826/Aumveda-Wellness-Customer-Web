@@ -14,7 +14,7 @@ import HeroSection from "../components/home/HeroSection";
 import ExploreWellness from "../components/home/ExploreWellness";
 import ShopByNeed from "../components/home/ShopByNeed";
 import BestDealsSection from "../components/home/BestDealsSection";
-
+import FAQChatbot from "../components/chatbot/FAQChatbot";
 import AvailableCoupons from "../components/home/AvailableCoupons";
 import ContinueShopping from "../components/home/ContinueShopping";
 
@@ -361,14 +361,17 @@ export default function HomePage() {
   ========================================================== */
 
   return (
-    <div className="aumveda-home-page">
-      <div className="aumveda-home-page__container">
-        {homeSections.map(({ key, content }) => (
-          cloneElement(content, { key })
-        ))}
-      </div>
-
-      {configurationError && null}
+  <div className="aumveda-home-page">
+    <div className="aumveda-home-page__container">
+      {homeSections.map(({ key, content }) => (
+        cloneElement(content, { key })
+      ))}
     </div>
-  );
+
+    {configurationError && null}
+
+    {/* FAQ Chatbot */}
+    <FAQChatbot />
+  </div>
+);
 }

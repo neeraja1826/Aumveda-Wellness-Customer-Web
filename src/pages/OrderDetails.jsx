@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -18,6 +18,7 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getCustomerOrderDetails } from "../services/orderService";
 import {
+  getReviewImageError,
   getCustomerOrderReviews,
   submitProductReview,
 } from "../services/reviewService";
@@ -194,9 +195,12 @@ function OrderProduct({ item, currency, canReview, review }) {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewTitle, setReviewTitle] = useState("");
   const [reviewText, setReviewText] = useState("");
+  const [reviewImage, setReviewImage] = useState(null);
+  const [reviewImagePreview, setReviewImagePreview] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [submittedReview, setSubmittedReview] = useState(null);
   const [reviewError, setReviewError] = useState("");
+  const reviewImageInputRef = useRef(null);
   const productId = item.product_id ?? item.product?.id;
   const images = item.product?.product_images || [];
   const productSlug =
@@ -218,6 +222,12 @@ function OrderProduct({ item, currency, canReview, review }) {
     item.product_name || item.product?.name || "Ayurvedic Botanical";
   const displayedReview = submittedReview || review;
 
+  useEffect(() => () => {
+    if (reviewImagePreview) {
+      URL.revokeObjectURL(reviewImagePreview);
+    }
+  }, [reviewImagePreview]);
+
   async function handleSubmitReview(event) {
     event.preventDefault();
 
@@ -230,12 +240,18 @@ function OrderProduct({ item, currency, canReview, review }) {
         rating: reviewRating,
         title: reviewTitle,
         reviewText,
+        image: reviewImage,
       });
       if (!result?.data) {
         throw new Error("The server did not return the saved review.");
       }
       setSubmittedReview(result.data);
       setReviewOpen(false);
+      setReviewImage(null);
+      setReviewImagePreview("");
+      if (reviewImageInputRef.current) {
+        reviewImageInputRef.current.value = "";
+      }
     } catch (submitError) {
       console.error("Order review submission failed:", submitError);
       setReviewError(
@@ -299,6 +315,14 @@ function OrderProduct({ item, currency, canReview, review }) {
               <strong>Your review</strong>
               {displayedReview.title && <h3>{displayedReview.title}</h3>}
               {displayedReview.review_text && <p>{displayedReview.review_text}</p>}
+              {displayedReview.image_url && (
+                <img
+                  className="order-detail__review-image"
+                  src={displayedReview.image_url}
+                  alt="Your review"
+                  loading="lazy"
+                />
+              )}
               {displayedReview.created_at && (
                 <time dateTime={displayedReview.created_at}>
                   {new Date(displayedReview.created_at).toLocaleDateString("en-IN")}
@@ -368,6 +392,47 @@ function OrderProduct({ item, currency, canReview, review }) {
                       disabled={reviewSubmitting}
                     />
                   </label>
+                  <label>
+                    Add a photo (optional)
+                    <input
+                      ref={reviewImageInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={event => {
+                        const file = event.target.files?.[0] || null;
+                        const imageError = getReviewImageError(file);
+                        if (imageError) {
+                          setReviewError(imageError);
+                          event.target.value = "";
+                          return;
+                        }
+                        setReviewImage(file);
+                        setReviewImagePreview(
+                          file ? URL.createObjectURL(file) : ""
+                        );
+                        setReviewError("");
+                      }}
+                      disabled={reviewSubmitting}
+                    />
+                  </label>
+                  {reviewImagePreview && (
+                    <div className="order-detail__review-image-preview">
+                      <img src={reviewImagePreview} alt="Review upload preview" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReviewImage(null);
+                          setReviewImagePreview("");
+                          if (reviewImageInputRef.current) {
+                            reviewImageInputRef.current.value = "";
+                          }
+                        }}
+                        disabled={reviewSubmitting}
+                      >
+                        Remove photo
+                      </button>
+                    </div>
+                  )}
                   {reviewError && (
                     <p className="order-detail__review-error" role="alert">
                       {reviewError}
@@ -658,9 +723,12 @@ export default function OrderDetails() {
               {Number(order.shipping) > 0 && (
                 <DetailRow label="Shipping" value={formatMoney(order.shipping, currency)} />
               )}
+              {order.coupon_code && (
+                <DetailRow label="Coupon" value={order.coupon_code} />
+              )}
               {Number(order.discount ?? order.discount_amount) > 0 && (
                 <DetailRow
-                  label="Discount"
+                  label={order.coupon_code ? "Coupon discount" : "Discount"}
                   value={`− ${formatMoney(order.discount ?? order.discount_amount, currency)}`}
                 />
               )}

@@ -103,10 +103,13 @@ function Cart() {
     ] =
         useState(getAppliedCoupon);
 
-    const cartCoupon =
-        appliedCoupon?.placement === "cart"
-            ? appliedCoupon
-            : null;
+    const cartCoupon = appliedCoupon;
+    const couponContextKey = (items || [])
+        .map(item =>
+            `${item?.variant?.id || item?.variant_id || item?.variantId || item?.id}:${Number(item?.quantity || 1)}`
+        )
+        .sort()
+        .join("|");
 
     const couponDiscount =
         cartCoupon?.applied
@@ -1039,6 +1042,7 @@ function Cart() {
                         subtotal={subtotal}
                         coupon={cartCoupon}
                         onChange={setAppliedCoupon}
+                        contextKey={couponContextKey}
                     />
 
                     <div

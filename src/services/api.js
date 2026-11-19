@@ -161,10 +161,17 @@ async function request(
     // HEADERS
     // --------------------------------------------------------
 
+    const hasFormDataBody =
+        typeof FormData !== "undefined" &&
+        fetchOptions.body instanceof FormData;
+
     const headers = {
 
-        "Content-Type":
-            "application/json",
+        ...(
+            hasFormDataBody
+                ? {}
+                : { "Content-Type": "application/json" }
+        ),
 
         ...fetchOptions.headers,
 
@@ -342,9 +349,10 @@ const api = {
                 method: "POST",
 
                 body:
-                    JSON.stringify(
-                        data
-                    ),
+                    typeof FormData !== "undefined" &&
+                    data instanceof FormData
+                        ? data
+                        : JSON.stringify(data),
 
             }
 

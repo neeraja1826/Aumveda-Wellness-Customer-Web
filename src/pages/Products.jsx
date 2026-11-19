@@ -29,6 +29,7 @@ import {
 
 import ProductGrid from "../components/products/ProductGrid";
 import ProductSort from "../components/products/ProductSort";
+import FAQChatbot from "../components/chatbot/FAQChatbot";
 
 import {
   getCategories,
@@ -2438,6 +2439,8 @@ export default function Products() {
           </aside>
         </div>
       )}
+
+      <FAQChatbot />
     </main>
   );
 }

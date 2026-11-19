@@ -247,7 +247,9 @@ export async function createCustomerOrder({
 
 export async function validateCustomerCoupon({
   code,
-  placement
+  placement,
+  variantId,
+  quantity
 }) {
   const result = await requestOrders(
     "/orders/coupons/validate",
@@ -255,12 +257,48 @@ export async function validateCustomerCoupon({
       method: "POST",
       body: {
         code,
-        placement
+        placement,
+        ...(variantId
+          ? {
+              variant_id: variantId,
+              quantity
+            }
+          : {})
       }
     }
   );
 
   return result?.data || result;
+}
+
+export async function getAvailableCustomerCoupons({
+  placement,
+  variantId,
+  quantity
+}) {
+  const result = await requestOrders(
+    "/orders/coupons/available",
+    {
+      method: "POST",
+      body: {
+        placement,
+        ...(variantId
+          ? {
+              variant_id: variantId,
+              quantity
+            }
+          : {})
+      }
+    }
+  );
+
+  if (!Array.isArray(result?.data)) {
+    throw new Error(
+      "The available coupons response was not in the expected format."
+    );
+  }
+
+  return result.data;
 }
 
 /* ============================================================
@@ -274,7 +312,9 @@ export async function createBuyNowOrder({
   addressId,
   variantId,
   quantity,
-  paymentMethod = "cod"
+  paymentMethod = "cod",
+  couponCode = null,
+  couponPlacement = null
 }) {
   if (!addressId) {
     throw new Error(
@@ -315,7 +355,9 @@ export async function createBuyNowOrder({
         address_id: addressId,
         variant_id: variantId,
         quantity: orderQuantity,
-        payment_method: "cod"
+        payment_method: "cod",
+        coupon_code: couponCode,
+        coupon_placement: couponPlacement
       }
     }
   );
